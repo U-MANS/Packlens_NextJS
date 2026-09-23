@@ -1,36 +1,67 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PackLens Next.js (full-stack)
 
-## Getting Started
+Proyecto paralelo que unifica el front React y el back FastAPI en **un solo** app Next.js (App Router).
 
-First, run the development server:
+## Qué incluye
+
+- UI completa portada desde `PackLens_React` (SPA embebida con React Router)
+- API Route Handlers en `/api/v1/*` alineados con el backend Python:
+  - Auth (login, refresh, logout, me, debug/register)
+  - Users CRUD + invitaciones
+  - Projects CRUD, clone, versions, archive, discontinue, briefing-files
+  - Workflow (approve / reject / comment)
+  - Proposals, arte-finals (multipart + signed upload), annotations, review-refs
+  - Tasks, comments, activity + replies
+  - Files proxy, dashboard, catalogs, notifications
+
+## Arranque
 
 ```bash
+cd PackLens_Nextjs
+cp .env.example .env.local   # o usa el .env.local ya preparado
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Abre **http://localhost:3000**
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Supabase
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. El proyecto debe estar **activo** (DNS resoluble).
+2. Para invitaciones, ejecuta en el SQL Editor:
 
-## Learn More
+```sql
+-- ver supabase/07_invitations.sql
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Variables de entorno
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Variable | Uso |
+|----------|-----|
+| `NEXT_PUBLIC_API_URL` | Base del cliente (`/api/v1`) |
+| `SUPABASE_URL` | Proyecto Supabase |
+| `SUPABASE_ANON_KEY` | Auth |
+| `SUPABASE_SERVICE_ROLE_KEY` | Consultas server-side + Storage |
+| `DEBUG_ENABLE_SIGNUP` | Habilita `/auth/debug/register` |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Estructura
 
-## Deploy on Vercel
+```
+src/
+  app/
+    [[...slug]]/     # Shell SPA (UI)
+    api/v1/          # Backend Next (Route Handlers)
+  App.tsx            # Rutas React Router (UI)
+  views/             # Pantallas (ex-pages; renombrado por conflicto con Next)
+  api/               # Cliente HTTP del front
+  components/ store/ ...
+  lib/               # Supabase + helpers server
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Pendiente opcional
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Envío real de emails de invitación (Brevo)
+- Campañas / documentos avanzados si se reactivan en la UI
+- Migrar React Router → App Router nativo
+
+Los repos `PackLens_React` y `PackLens_Python` se mantienen intactos.
