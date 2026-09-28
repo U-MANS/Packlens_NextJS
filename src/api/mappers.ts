@@ -72,6 +72,13 @@ export interface ApiProject {
   art_deadline?: string | null;
   regulatory_contact?: string | null;
   design_lead?: string | null;
+  marketing_assignee_type?: 'user' | 'agent' | null;
+  marketing_agent_id?: string | null;
+  marketing_agent_name?: string | null;
+  regulatory_assignee_type?: 'user' | 'agent' | null;
+  regulatory_agent_id?: string | null;
+  regulatory_agent_name?: string | null;
+  agent_review_running?: boolean | null;
   briefing?: Record<string, unknown> | null;
   thumbnail?: Record<string, unknown> | null;
 }
@@ -326,6 +333,14 @@ export function mapProject(p: ApiProject): Project {
     artDeadline: p.art_deadline ?? undefined,
     regulatoryContact: p.regulatory_contact ?? undefined,
     designLead: p.design_lead ?? undefined,
+    marketingAssigneeType: (p.marketing_assignee_type as Project['marketingAssigneeType']) ?? 'user',
+    marketingAgentId: p.marketing_agent_id ?? undefined,
+    marketingAgentName: p.marketing_agent_name ?? undefined,
+    regulatoryAssigneeType:
+      (p.regulatory_assignee_type as Project['regulatoryAssigneeType']) ?? 'user',
+    regulatoryAgentId: p.regulatory_agent_id ?? undefined,
+    regulatoryAgentName: p.regulatory_agent_name ?? undefined,
+    agentReviewRunning: Boolean(p.agent_review_running),
     briefing: mapBriefing(p.briefing as Record<string, unknown> | null | undefined),
     thumbnail: mapThumbnail(p.thumbnail as Record<string, unknown> | null | undefined),
   };

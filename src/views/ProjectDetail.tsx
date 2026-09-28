@@ -93,6 +93,15 @@ const ProjectDetail = () => {
     void loadProjectDetail(id).finally(() => setDetailLoading(false));
   }, [id, loadProjectDetail]);
 
+  // Refresca el detalle mientras un agente revisa la fase.
+  useEffect(() => {
+    if (!id || !project?.agentReviewRunning) return;
+    const t = setInterval(() => {
+      void loadProjectDetail(id);
+    }, 4000);
+    return () => clearInterval(t);
+  }, [id, project?.agentReviewRunning, loadProjectDetail]);
+
   if (detailLoading) {
     return (
       <div className="flex flex-1 items-center justify-center p-12">
@@ -182,14 +191,28 @@ const ProjectDetail = () => {
               <span className="mx-2 text-slate-300">•</span>
               Mercados: {marketsLabel}
               <span className="mx-2 text-slate-300">•</span>
-              Responsable: {project.owner}
-              {project.regulatoryContact && (
+              Responsable:{' '}
+              {project.marketingAssigneeType === 'agent' && project.marketingAgentName
+                ? `${project.marketingAgentName} (Agente)`
+                : project.owner}
+              {(project.regulatoryAssigneeType === 'agent' && project.regulatoryAgentName) ||
+              project.regulatoryContact ? (
                 <>
                   <span className="mx-2 text-slate-300">•</span>
-                  Regulatory: {project.regulatoryContact}
+                  Regulatory:{' '}
+                  {project.regulatoryAssigneeType === 'agent' && project.regulatoryAgentName
+                    ? `${project.regulatoryAgentName} (Agente)`
+                    : project.regulatoryContact}
                 </>
-              )}
+              ) : null}
             </p>
+
+            {project.agentReviewRunning && (
+              <div className="mt-3 inline-flex items-center gap-2 text-xs font-medium text-violet-800 bg-violet-50 border border-violet-200 px-3 py-1.5 rounded-md">
+                <span className="w-1.5 h-1.5 rounded-full bg-violet-500 animate-pulse" />
+                Agente IA revisando esta fase…
+              </div>
+            )}
 
             {/* SAP code row */}
             <div className="mt-2 flex items-center gap-2">

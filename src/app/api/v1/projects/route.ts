@@ -66,6 +66,10 @@ export async function POST(request: NextRequest) {
     owner_name?: string;
     design_lead?: string;
     regulatory_contact?: string;
+    marketing_assignee_type?: 'user' | 'agent';
+    marketing_agent_id?: string;
+    regulatory_assignee_type?: 'user' | 'agent';
+    regulatory_agent_id?: string;
     description?: string;
     briefing_notes?: string;
     briefing_refs?: { id: string; name: string; sku: string }[];
@@ -78,6 +82,18 @@ export async function POST(request: NextRequest) {
     return jsonError('art_deadline debe ser anterior a launch_date', 400);
   }
 
+  const marketingType = body.marketing_assignee_type === 'agent' ? 'agent' : 'user';
+  const regulatoryType = body.regulatory_assignee_type === 'agent' ? 'agent' : 'user';
+  if (marketingType === 'agent' && !body.marketing_agent_id) {
+    return jsonError('Selecciona un agente de Marketing', 400);
+  }
+  if (regulatoryType === 'agent' && !body.regulatory_agent_id) {
+    return jsonError('Selecciona un agente de I+D', 400);
+  }
+  if (marketingType === 'user' && !body.owner_name) {
+    return jsonError('Asigna un responsable de Marketing', 400);
+  }
+
   const admin = getAdminClient();
   const { data: existing } = await admin
     .from('projects')
@@ -88,13 +104,34 @@ export async function POST(request: NextRequest) {
   if (existing) return jsonError(`Ya existe un proyecto activo con SKU ${body.sku}`, 409);
 
   let ownerId = user.id;
-  if (body.owner_name) {
+  if (marketingType === 'user' && body.owner_name) {
     const { data: owner } = await admin
       .from('users')
       .select('id')
       .ilike('name', body.owner_name.trim())
       .maybeSingle();
     if (owner) ownerId = owner.id;
+  }
+
+  if (marketingType === 'agent' && body.marketing_agent_id) {
+    const { data: mag } = await admin
+      .from('agents')
+      .select('id, role, status')
+      .eq('id', body.marketing_agent_id)
+      .maybeSingle();
+    if (!mag || mag.role !== 'Marketing' || mag.status !== 'Activo') {
+      return jsonError('Agente de Marketing inválido o inactivo', 400);
+    }
+  }
+  if (regulatoryType === 'agent' && body.regulatory_agent_id) {
+    const { data: rag } = await admin
+      .from('agents')
+      .select('id, role, status')
+      .eq('id', body.regulatory_agent_id)
+      .maybeSingle();
+    if (!rag || rag.role !== 'I+D' || rag.status !== 'Activo') {
+      return jsonError('Agente de I+D inválido o inactivo', 400);
+    }
   }
 
   const { label, code } = primaryMarket(body.markets);
@@ -130,8 +167,12 @@ export async function POST(request: NextRequest) {
       label_languages_back: body.label_languages_back ?? [],
       launch_date: body.launch_date ?? null,
       art_deadline: body.art_deadline ?? null,
-      regulatory_contact: body.regulatory_contact ?? null,
+      regulatory_contact: regulatoryType === 'user' ? (body.regulatory_contact ?? null) : null,
       design_lead: body.design_lead ?? null,
+      marketing_assignee_type: marketingType,
+      marketing_agent_id: marketingType === 'agent' ? body.marketing_agent_id : null,
+      regulatory_assignee_type: regulatoryType,
+      regulatory_agent_id: regulatoryType === 'agent' ? body.regulatory_agent_id : null,
       briefing,
       substitution_type: body.substitution_type ?? null,
       temporal_end_date: body.temporal_end_date ?? null,

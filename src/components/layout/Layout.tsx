@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, FolderKanban, BookOpen, Bell, Search, User, Users, LogOut, Sparkles, Megaphone } from 'lucide-react';
+import { LayoutDashboard, FolderKanban, BookOpen, Bell, Search, User, Users, LogOut, Sparkles, Megaphone, Bot } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useNotificationStore } from '../../store/useNotificationStore';
@@ -124,7 +124,7 @@ const Layout = () => {
           </NavLink>
           {/* Tareas y Ajustes ocultos temporalmente */}
 
-          <div className="pt-3 mt-3 border-t border-border">
+          <div className="pt-3 mt-3 border-t border-border space-y-1">
             <NavLink
               to="/users"
               className={({ isActive }) =>
@@ -138,6 +138,21 @@ const Layout = () => {
               <Users size={18} />
               Usuarios
             </NavLink>
+            {isAdmin && (
+              <NavLink
+                to="/agents"
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                    isActive
+                      ? 'bg-accent/10 text-accent'
+                      : 'text-slate-600 hover:bg-slate-100'
+                  }`
+                }
+              >
+                <Bot size={18} />
+                Agentes
+              </NavLink>
+            )}
           </div>
         </nav>
 

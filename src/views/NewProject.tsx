@@ -1,11 +1,9 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Check,
   CheckCircle2,
-  ChevronDown,
   CornerDownRight,
   FileText,
   FolderKanban,
@@ -23,7 +21,7 @@ import {
 } from 'lucide-react';
 
 import { useAppStore } from '../store/useAppStore';
-import { createProjectVersion, listUsers } from '../api';
+import { createProjectVersion, listUsers, listAgents, type ApiAgent } from '../api';
 import { ensureUniqueSku, isSkuTaken, slugSkuFromName } from '../utils/sku';
 import type { ApiUser } from '../api/mappers';
 import { toast } from '../components/ui/Toast';
@@ -31,6 +29,8 @@ import { getErrorMessage } from '../utils/errors';
 import { formatDate } from '../utils/dates';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { DateInput } from '../components/ui/DateInput';
+import { MultiSelectDropdown } from '../components/ui/MultiSelectDropdown';
+import { AssigneeField, type AssigneeKind } from '../components/ui/AssigneeField';
 import {
   availableLanguages,
   availableMarkets,
@@ -93,6 +93,10 @@ interface FormState {
   owners: string[];
   designLeads: string[];
   regulatoryContacts: string[];
+  marketingAssigneeType: AssigneeKind;
+  marketingAgentId: string;
+  regulatoryAssigneeType: AssigneeKind;
+  regulatoryAgentId: string;
   description: string;
   briefingNotes: string;
   briefingFiles: import('../types').BriefingFile[];
@@ -121,6 +125,10 @@ const initialState: FormState = {
   owners: [],
   designLeads: [],
   regulatoryContacts: [],
+  marketingAssigneeType: 'user',
+  marketingAgentId: '',
+  regulatoryAssigneeType: 'user',
+  regulatoryAgentId: '',
   description: '',
   briefingNotes: '',
   briefingFiles: [],
@@ -204,156 +212,12 @@ const Chip: React.FC<{
 const inputClass =
   'w-full px-3 py-2 bg-white border border-border rounded-md text-sm text-primary placeholder:text-slate-400 focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 transition-all';
 
-/** Dropdown con checkboxes para selección múltiple */
-function computeDropdownStyle(
-  buttonEl: HTMLButtonElement,
-  panelEl: HTMLDivElement,
-): React.CSSProperties {
-  const rect = buttonEl.getBoundingClientRect();
-  const gap = 4;
-
-  panelEl.style.position = 'fixed';
-  panelEl.style.left = `${rect.left}px`;
-  panelEl.style.width = `${rect.width}px`;
-  panelEl.style.top = '-9999px';
-  panelEl.style.visibility = 'hidden';
-
-  const height = panelEl.offsetHeight;
-  let top = rect.bottom + gap;
-  if (top + height > window.innerHeight - gap) {
-    top = Math.max(gap, rect.top - height - gap);
-  }
-
-  return {
-    position: 'fixed',
-    top,
-    left: rect.left,
-    width: rect.width,
-    zIndex: 9999,
-    visibility: 'visible',
-  };
-}
-
-const MultiSelectDropdown: React.FC<{
-  options: string[];
-  selected: string[];
-  placeholder: string;
-  onChange: (values: string[]) => void;
-}> = ({ options, selected, placeholder, onChange }) => {
-  const [open, setOpen] = useState(false);
-  const [panelStyle, setPanelStyle] = useState<React.CSSProperties | null>(null);
-  const rootRef = useRef<HTMLDivElement | null>(null);
-  const buttonRef = useRef<HTMLButtonElement | null>(null);
-  const panelRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (rootRef.current?.contains(target) || panelRef.current?.contains(target)) return;
-      setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  useLayoutEffect(() => {
-    if (!open || !buttonRef.current || !panelRef.current) return;
-    setPanelStyle(computeDropdownStyle(buttonRef.current, panelRef.current));
-  }, [open, options.length]);
-
-  useEffect(() => {
-    if (!open) {
-      setPanelStyle(null);
-      return;
-    }
-    const close = () => setOpen(false);
-    window.addEventListener('scroll', close, true);
-    window.addEventListener('resize', close);
-    return () => {
-      window.removeEventListener('scroll', close, true);
-      window.removeEventListener('resize', close);
-    };
-  }, [open]);
-
-  const toggle = (opt: string) => {
-    onChange(
-      selected.includes(opt) ? selected.filter((s) => s !== opt) : [...selected, opt],
-    );
-  };
-
-  const label =
-    selected.length === 0
-      ? placeholder
-      : selected.length === 1
-        ? selected[0]
-        : `${selected[0]} +${selected.length - 1} más`;
-
-  return (
-    <div ref={rootRef} className="relative">
-      <button
-        ref={buttonRef}
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={`w-full flex items-center justify-between px-3 py-2 bg-white border rounded-md text-sm transition-all ${
-          open
-            ? 'border-accent ring-2 ring-accent/20 text-primary'
-            : 'border-border text-primary hover:border-slate-400'
-        }`}
-      >
-        <span className={selected.length === 0 ? 'text-slate-400' : ''}>{label}</span>
-        <ChevronDown
-          size={15}
-          className={`text-slate-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
-        />
-      </button>
-
-      {open &&
-        createPortal(
-          <div
-            ref={panelRef}
-            style={
-              panelStyle ?? {
-                position: 'fixed',
-                top: -9999,
-                left: 0,
-                width: buttonRef.current?.offsetWidth ?? 0,
-                visibility: 'hidden',
-              }
-            }
-            className="bg-white border border-border rounded-lg shadow-lg py-1 max-h-52 overflow-y-auto"
-          >
-            {options.map((opt) => {
-              const active = selected.includes(opt);
-              return (
-                <button
-                  key={opt}
-                  type="button"
-                  onClick={() => toggle(opt)}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-left hover:bg-slate-50 transition-colors"
-                >
-                  <span
-                    className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
-                      active ? 'bg-accent border-accent' : 'border-slate-300'
-                    }`}
-                  >
-                    {active && <Check size={11} className="text-white" />}
-                  </span>
-                  <span className={active ? 'font-medium text-primary' : 'text-slate-700'}>{opt}</span>
-                </button>
-              );
-            })}
-          </div>,
-          document.body,
-        )}
-    </div>
-  );
-};
-
 const NewProject = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { addProject, projects } = useAppStore();
   const [teamUsers, setTeamUsers] = useState<ApiUser[]>([]);
+  const [agents, setAgents] = useState<ApiAgent[]>([]);
   const [rawBriefingFiles, setRawBriefingFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -436,6 +300,9 @@ const NewProject = () => {
     listUsers({ status: 'Activo' })
       .then(setTeamUsers)
       .catch((e) => toast.error(getErrorMessage(e, 'Error cargando el equipo')));
+    listAgents({ status: 'Activo' })
+      .then(setAgents)
+      .catch((e) => toast.error(getErrorMessage(e, 'Error cargando agentes')));
   }, []);
 
   const teamOptions = useMemo(() => {
@@ -451,6 +318,14 @@ const NewProject = () => {
       regulatory: forRoles('I+D', 'Admin'),
     };
   }, [teamUsers]);
+
+  const agentOptions = useMemo(
+    () => ({
+      marketing: agents.filter((a) => a.role === 'Marketing'),
+      regulatory: agents.filter((a) => a.role === 'I+D'),
+    }),
+    [agents],
+  );
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [refModalOpen, setRefModalOpen] = useState(false);
   const [refSearch, setRefSearch] = useState('');
@@ -570,7 +445,14 @@ const NewProject = () => {
     } else if (form.labelLanguages.length === 0) {
       e.labelLanguages = 'Selecciona al menos un idioma';
     }
-    if (!form.owners.length) e.owners = 'Asigna al menos un responsable';
+    if (form.marketingAssigneeType === 'user') {
+      if (!form.owners.length) e.owners = 'Asigna al menos un responsable';
+    } else if (!form.marketingAgentId) {
+      e.marketingAgentId = 'Selecciona un agente de Marketing';
+    }
+    if (form.regulatoryAssigneeType === 'agent' && !form.regulatoryAgentId) {
+      e.regulatoryAgentId = 'Selecciona un agente de I+D';
+    }
     if (!form.launchDate) e.launchDate = 'Fecha de lanzamiento requerida';
     if (!form.artDeadline) e.artDeadline = 'Fecha límite de arte requerida';
     if (
@@ -616,15 +498,25 @@ const NewProject = () => {
         label_languages_back: isAvFlow ? [] : form.labelLanguagesBack,
         launch_date: form.launchDate || undefined,
         art_deadline: form.artDeadline || undefined,
-        owner_name: form.owners[0] ? stripRoleSuffix(form.owners[0]) : undefined,
+        owner_name:
+          form.marketingAssigneeType === 'user' && form.owners[0]
+            ? stripRoleSuffix(form.owners[0])
+            : undefined,
         design_lead: form.designLeads[0] ? stripRoleSuffix(form.designLeads[0]) : undefined,
-        regulatory_contact: form.regulatoryContacts[0]
-          ? stripRoleSuffix(form.regulatoryContacts[0])
-          : undefined,
+        regulatory_contact:
+          form.regulatoryAssigneeType === 'user' && form.regulatoryContacts[0]
+            ? stripRoleSuffix(form.regulatoryContacts[0])
+            : undefined,
+        marketing_assignee_type: form.marketingAssigneeType,
+        marketing_agent_id:
+          form.marketingAssigneeType === 'agent' ? form.marketingAgentId || undefined : undefined,
+        regulatory_assignee_type: form.regulatoryAssigneeType,
+        regulatory_agent_id:
+          form.regulatoryAssigneeType === 'agent' ? form.regulatoryAgentId || undefined : undefined,
         assignee_user_ids: collectAssigneeUserIds(
-          form.owners,
+          form.marketingAssigneeType === 'user' ? form.owners : [],
           form.designLeads,
-          form.regulatoryContacts,
+          form.regulatoryAssigneeType === 'user' ? form.regulatoryContacts : [],
           teamUsers,
         ),
         description: form.description.trim(),
@@ -1191,21 +1083,42 @@ const NewProject = () => {
                     )}
                   </Field>
 
-                  <Field label="Responsable (Marketing)" required hint="Usuarios de Marketing o Admin.">
-                    <MultiSelectDropdown
-                      options={teamOptions.marketing}
-                      selected={form.owners}
-                      placeholder={
-                        teamOptions.marketing.length
-                          ? 'Selecciona responsable/s…'
-                          : 'No hay usuarios de Marketing o Admin — créalos en Usuarios'
-                      }
-                      onChange={(v) => setForm((p) => ({ ...p, owners: v }))}
-                    />
-                    {submitAttempted && errors.owners && (
-                      <span className="text-xs text-red-500 mt-1 block">{errors.owners}</span>
-                    )}
-                  </Field>
+                  <AssigneeField
+                    label="Responsable (Marketing)"
+                    required
+                    hint={
+                      form.marketingAssigneeType === 'agent'
+                        ? 'Agente IA que revisará Aprobación Diseño / Validación.'
+                        : 'Usuarios de Marketing o Admin.'
+                    }
+                    error={
+                      submitAttempted
+                        ? form.marketingAssigneeType === 'user'
+                          ? errors.owners
+                          : errors.marketingAgentId
+                        : undefined
+                    }
+                    kind={form.marketingAssigneeType}
+                    onKindChange={(kind) =>
+                      setForm((p) => ({
+                        ...p,
+                        marketingAssigneeType: kind,
+                        owners: kind === 'agent' ? [] : p.owners,
+                        marketingAgentId: kind === 'user' ? '' : p.marketingAgentId,
+                      }))
+                    }
+                    userOptions={teamOptions.marketing}
+                    selectedUsers={form.owners}
+                    onUsersChange={(v) => setForm((p) => ({ ...p, owners: v }))}
+                    userPlaceholder={
+                      teamOptions.marketing.length
+                        ? 'Selecciona responsable/s…'
+                        : 'No hay usuarios de Marketing o Admin'
+                    }
+                    agentOptions={agentOptions.marketing}
+                    selectedAgentId={form.marketingAgentId}
+                    onAgentChange={(id) => setForm((p) => ({ ...p, marketingAgentId: id }))}
+                  />
 
                   <Field
                     label="Responsable de diseño"
@@ -1223,18 +1136,35 @@ const NewProject = () => {
                     />
                   </Field>
 
-                  <Field label="Contacto I+D y Calidad" hint="Usuarios de I+D o Admin.">
-                    <MultiSelectDropdown
-                      options={teamOptions.regulatory}
-                      selected={form.regulatoryContacts}
-                      placeholder={
-                        teamOptions.regulatory.length
-                          ? 'Sin asignar'
-                          : 'No hay usuarios de I+D o Admin — créalos en Usuarios'
-                      }
-                      onChange={(v) => setForm((p) => ({ ...p, regulatoryContacts: v }))}
-                    />
-                  </Field>
+                  <AssigneeField
+                    label="Contacto I+D y Calidad"
+                    hint={
+                      form.regulatoryAssigneeType === 'agent'
+                        ? 'Agente IA que revisará Aprobación Legal.'
+                        : 'Usuarios de I+D o Admin.'
+                    }
+                    error={submitAttempted ? errors.regulatoryAgentId : undefined}
+                    kind={form.regulatoryAssigneeType}
+                    onKindChange={(kind) =>
+                      setForm((p) => ({
+                        ...p,
+                        regulatoryAssigneeType: kind,
+                        regulatoryContacts: kind === 'agent' ? [] : p.regulatoryContacts,
+                        regulatoryAgentId: kind === 'user' ? '' : p.regulatoryAgentId,
+                      }))
+                    }
+                    userOptions={teamOptions.regulatory}
+                    selectedUsers={form.regulatoryContacts}
+                    onUsersChange={(v) => setForm((p) => ({ ...p, regulatoryContacts: v }))}
+                    userPlaceholder={
+                      teamOptions.regulatory.length
+                        ? 'Sin asignar'
+                        : 'No hay usuarios de I+D o Admin'
+                    }
+                    agentOptions={agentOptions.regulatory}
+                    selectedAgentId={form.regulatoryAgentId}
+                    onAgentChange={(id) => setForm((p) => ({ ...p, regulatoryAgentId: id }))}
+                  />
                 </div>
               </CardContent>
             </Card>

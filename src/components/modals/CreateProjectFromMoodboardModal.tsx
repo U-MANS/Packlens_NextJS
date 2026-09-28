@@ -6,8 +6,12 @@ import { CheckCircle2, FileImage, Loader2 } from 'lucide-react';
 
 import { Modal } from '../ui/Modal';
 import { DateInput } from '../ui/DateInput';
+import { MultiSelectDropdown } from '../ui/MultiSelectDropdown';
+import { AssigneeField, type AssigneeKind } from '../ui/AssigneeField';
 import { useAppStore } from '../../store/useAppStore';
 import { useAuthStore } from '../../store/useAuthStore';
+import { listUsers, listAgents, type ApiAgent } from '../../api';
+import type { ApiUser } from '../../api/mappers';
 import { toast } from '../ui/Toast';
 import { getErrorMessage } from '../../utils/errors';
 import { ensureUniqueSku, isSkuTaken, slugSkuFromName } from '../../utils/sku';
@@ -17,7 +21,7 @@ import {
   availableMarkets,
   productLines,
 } from '../../data/mockSeed';
-import type { FlowType } from '../../types';
+import type { FlowType, Role } from '../../types';
 
 export type MoodboardProposalSource = {
   id: string;
@@ -54,6 +58,36 @@ const FLOW_OPTIONS: { value: FlowType; locked: boolean }[] = [
 const inputClass =
   'w-full px-3 py-2 bg-white border border-border rounded-md text-sm text-primary placeholder:text-slate-400 focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 transition-all';
 
+function formatTeamOption(user: { name: string; role: string }): string {
+  return `${user.name} (${user.role})`;
+}
+
+function stripRoleSuffix(label: string): string {
+  return label.replace(/\s*\([^)]+\)\s*$/, '').trim();
+}
+
+function resolveUserId(label: string, users: ApiUser[]): string | undefined {
+  if (!label) return undefined;
+  const exact = users.find((u) => formatTeamOption(u) === label);
+  if (exact) return exact.id;
+  const name = stripRoleSuffix(label);
+  return users.find((u) => u.name === name)?.id;
+}
+
+function collectAssigneeUserIds(
+  owners: string[],
+  designLeads: string[],
+  regulatoryContacts: string[],
+  users: ApiUser[],
+): string[] {
+  const ids = [
+    ...owners.map((o) => resolveUserId(o, users)),
+    ...designLeads.map((o) => resolveUserId(o, users)),
+    ...regulatoryContacts.map((o) => resolveUserId(o, users)),
+  ].filter((id): id is string => Boolean(id));
+  return [...new Set(ids)];
+}
+
 type FormState = {
   name: string;
   sku: string;
@@ -66,6 +100,13 @@ type FormState = {
   labelLanguages: string[];
   launchDate: string;
   artDeadline: string;
+  owners: string[];
+  designLeads: string[];
+  regulatoryContacts: string[];
+  marketingAssigneeType: AssigneeKind;
+  marketingAgentId: string;
+  regulatoryAssigneeType: AssigneeKind;
+  regulatoryAgentId: string;
   description: string;
   briefingNotes: string;
 };
@@ -101,15 +142,17 @@ async function proposalImageToFile(proposal: MoodboardProposalSource): Promise<F
 const Field: React.FC<{
   label: string;
   required?: boolean;
+  hint?: string;
   error?: string;
   children: React.ReactNode;
-}> = ({ label, required, error, children }) => (
+}> = ({ label, required, hint, error, children }) => (
   <label className="block">
     <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
       {label}
       {required && <span className="text-red-500 ml-0.5">*</span>}
     </span>
     {children}
+    {hint && !error && <span className="block text-xs text-slate-400 mt-1">{hint}</span>}
     {error && <span className="block text-xs text-red-500 mt-1">{error}</span>}
   </label>
 );
@@ -147,6 +190,8 @@ export const CreateProjectFromMoodboardModal: React.FC<Props> = ({
   const uploadProjectThumbnail = useAppStore((s) => s.uploadProjectThumbnail);
   const authUser = useAuthStore((s) => s.user);
 
+  const [teamUsers, setTeamUsers] = useState<ApiUser[]>([]);
+  const [agents, setAgents] = useState<ApiAgent[]>([]);
   const [form, setForm] = useState<FormState | null>(null);
   const [skuTouched, setSkuTouched] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -155,6 +200,38 @@ export const CreateProjectFromMoodboardModal: React.FC<Props> = ({
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    listUsers({ status: 'Activo' })
+      .then(setTeamUsers)
+      .catch((e) => toast.error(getErrorMessage(e, 'Error cargando el equipo')));
+    listAgents({ status: 'Activo' })
+      .then(setAgents)
+      .catch((e) => toast.error(getErrorMessage(e, 'Error cargando agentes')));
+  }, [open]);
+
+  const teamOptions = useMemo(() => {
+    const active = teamUsers.filter((u) => u.status === 'Activo');
+    const forRoles = (...roles: Role[]) =>
+      active
+        .filter((u) => roles.includes(u.role as Role))
+        .map(formatTeamOption)
+        .sort((a, b) => a.localeCompare(b, 'es'));
+    return {
+      marketing: forRoles('Marketing', 'Admin'),
+      design: forRoles('Diseño', 'Admin'),
+      regulatory: forRoles('I+D', 'Admin'),
+    };
+  }, [teamUsers]);
+
+  const agentOptions = useMemo(
+    () => ({
+      marketing: agents.filter((a) => a.role === 'Marketing'),
+      regulatory: agents.filter((a) => a.role === 'I+D'),
+    }),
+    [agents],
+  );
 
   useEffect(() => {
     if (!open || !proposal) {
@@ -169,6 +246,11 @@ export const CreateProjectFromMoodboardModal: React.FC<Props> = ({
       return;
     }
 
+    const defaultOwner =
+      authUser && (authUser.role === 'Marketing' || authUser.role === 'Admin')
+        ? [formatTeamOption(authUser)]
+        : [];
+
     setForm({
       name: '',
       sku: '',
@@ -181,6 +263,13 @@ export const CreateProjectFromMoodboardModal: React.FC<Props> = ({
       labelLanguages: ['Español'],
       launchDate: '',
       artDeadline: '',
+      owners: defaultOwner,
+      designLeads: [],
+      regulatoryContacts: [],
+      marketingAssigneeType: 'user',
+      marketingAgentId: '',
+      regulatoryAssigneeType: 'user',
+      regulatoryAgentId: '',
       description: '',
       briefingNotes: buildNotes(proposal, creativeBrief),
     });
@@ -241,6 +330,14 @@ export const CreateProjectFromMoodboardModal: React.FC<Props> = ({
       }
     } else if (form.labelLanguages.length === 0) {
       e.labelLanguages = 'Selecciona al menos un idioma';
+    }
+    if (form.marketingAssigneeType === 'user') {
+      if (!form.owners.length) e.owners = 'Asigna al menos un responsable';
+    } else if (!form.marketingAgentId) {
+      e.marketingAgentId = 'Selecciona un agente de Marketing';
+    }
+    if (form.regulatoryAssigneeType === 'agent' && !form.regulatoryAgentId) {
+      e.regulatoryAgentId = 'Selecciona un agente de I+D';
     }
     if (!form.launchDate) e.launchDate = 'Fecha de lanzamiento requerida';
     if (!form.artDeadline) e.artDeadline = 'Fecha límite de arte requerida';
@@ -326,7 +423,29 @@ export const CreateProjectFromMoodboardModal: React.FC<Props> = ({
           label_languages_back: isAvFlow ? [] : form.labelLanguagesBack,
           launch_date: form.launchDate || undefined,
           art_deadline: form.artDeadline || undefined,
-          owner_name: authUser?.name,
+          owner_name:
+            form.marketingAssigneeType === 'user' && form.owners[0]
+              ? stripRoleSuffix(form.owners[0])
+              : undefined,
+          design_lead: form.designLeads[0] ? stripRoleSuffix(form.designLeads[0]) : undefined,
+          regulatory_contact:
+            form.regulatoryAssigneeType === 'user' && form.regulatoryContacts[0]
+              ? stripRoleSuffix(form.regulatoryContacts[0])
+              : undefined,
+          marketing_assignee_type: form.marketingAssigneeType,
+          marketing_agent_id:
+            form.marketingAssigneeType === 'agent' ? form.marketingAgentId || undefined : undefined,
+          regulatory_assignee_type: form.regulatoryAssigneeType,
+          regulatory_agent_id:
+            form.regulatoryAssigneeType === 'agent'
+              ? form.regulatoryAgentId || undefined
+              : undefined,
+          assignee_user_ids: collectAssigneeUserIds(
+            form.marketingAssigneeType === 'user' ? form.owners : [],
+            form.designLeads,
+            form.regulatoryAssigneeType === 'user' ? form.regulatoryContacts : [],
+            teamUsers,
+          ),
           description: form.description.trim() || undefined,
           briefing_notes: form.briefingNotes.trim() || undefined,
         },
@@ -388,31 +507,127 @@ export const CreateProjectFromMoodboardModal: React.FC<Props> = ({
           Preparando formulario…
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-6">
-          <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Imagen de briefing
-            </p>
-            <div className="aspect-square rounded-lg border border-border overflow-hidden bg-slate-50">
-              {loadingImage ? (
-                <div className="w-full h-full flex items-center justify-center text-slate-400">
-                  <Loader2 size={20} className="animate-spin" />
-                </div>
-              ) : imagePreview ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={imagePreview}
-                  alt={proposal.label}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-xs text-slate-400 p-3 text-center">
-                  No se pudo cargar la imagen
-                </div>
-              )}
+        <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-6 items-start">
+          <aside className="space-y-4 md:sticky md:top-0">
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Imagen de briefing
+              </p>
+              <div className="aspect-square rounded-lg border border-border overflow-hidden bg-slate-50">
+                {loadingImage ? (
+                  <div className="w-full h-full flex items-center justify-center text-slate-400">
+                    <Loader2 size={20} className="animate-spin" />
+                  </div>
+                ) : imagePreview ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={imagePreview}
+                    alt={proposal.label}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-xs text-slate-400 p-3 text-center">
+                    No se pudo cargar la imagen
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-slate-500">{proposal.label}</p>
             </div>
-            <p className="text-xs text-slate-500">{proposal.label}</p>
-          </div>
+
+            <div className="space-y-3 pt-1 border-t border-border">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 pt-3">
+                Equipo
+              </p>
+              <AssigneeField
+                label="Responsable (Marketing)"
+                required
+                hint={
+                  form.marketingAssigneeType === 'agent'
+                    ? 'Agente IA · Aprobación Diseño'
+                    : 'Marketing o Admin'
+                }
+                error={
+                  submitAttempted
+                    ? form.marketingAssigneeType === 'user'
+                      ? errors.owners
+                      : errors.marketingAgentId
+                    : undefined
+                }
+                kind={form.marketingAssigneeType}
+                onKindChange={(kind) =>
+                  setForm((p) =>
+                    p
+                      ? {
+                          ...p,
+                          marketingAssigneeType: kind,
+                          owners: kind === 'agent' ? [] : p.owners,
+                          marketingAgentId: kind === 'user' ? '' : p.marketingAgentId,
+                        }
+                      : p,
+                  )
+                }
+                userOptions={teamOptions.marketing}
+                selectedUsers={form.owners}
+                onUsersChange={(v) => update('owners', v)}
+                userPlaceholder={
+                  teamOptions.marketing.length
+                    ? 'Selecciona responsable/s…'
+                    : 'No hay usuarios de Marketing o Admin'
+                }
+                agentOptions={agentOptions.marketing}
+                selectedAgentId={form.marketingAgentId}
+                onAgentChange={(id) => update('marketingAgentId', id)}
+                disabled={submitting}
+              />
+              <Field label="Responsable de diseño" hint="Diseño o Admin">
+                <MultiSelectDropdown
+                  options={teamOptions.design}
+                  selected={form.designLeads}
+                  disabled={submitting}
+                  placeholder={
+                    teamOptions.design.length
+                      ? 'Sin asignar'
+                      : 'No hay usuarios de Diseño o Admin'
+                  }
+                  onChange={(v) => update('designLeads', v)}
+                />
+              </Field>
+              <AssigneeField
+                label="Contacto I+D y Calidad"
+                hint={
+                  form.regulatoryAssigneeType === 'agent'
+                    ? 'Agente IA · Aprobación Legal'
+                    : 'I+D o Admin'
+                }
+                error={submitAttempted ? errors.regulatoryAgentId : undefined}
+                kind={form.regulatoryAssigneeType}
+                onKindChange={(kind) =>
+                  setForm((p) =>
+                    p
+                      ? {
+                          ...p,
+                          regulatoryAssigneeType: kind,
+                          regulatoryContacts: kind === 'agent' ? [] : p.regulatoryContacts,
+                          regulatoryAgentId: kind === 'user' ? '' : p.regulatoryAgentId,
+                        }
+                      : p,
+                  )
+                }
+                userOptions={teamOptions.regulatory}
+                selectedUsers={form.regulatoryContacts}
+                onUsersChange={(v) => update('regulatoryContacts', v)}
+                userPlaceholder={
+                  teamOptions.regulatory.length
+                    ? 'Sin asignar'
+                    : 'No hay usuarios de I+D o Admin'
+                }
+                agentOptions={agentOptions.regulatory}
+                selectedAgentId={form.regulatoryAgentId}
+                onAgentChange={(id) => update('regulatoryAgentId', id)}
+                disabled={submitting}
+              />
+            </div>
+          </aside>
 
           <div className="space-y-4 min-w-0">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

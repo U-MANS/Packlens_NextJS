@@ -13,6 +13,7 @@ import ProjectList from './views/ProjectList';
 import ProjectDetail from './views/ProjectDetail';
 import NewProject from './views/NewProject';
 import Users from './views/Users';
+import Agents from './views/Agents';
 import AcceptInvite from './views/AcceptInvite';
 import Library from './views/Library';
 import LibraryProduct from './views/LibraryProduct';
@@ -44,6 +45,7 @@ function App() {
             <Route path="campaigns" element={<CampaignsCalendar />} />
             <Route path="campaigns/*" element={<Navigate to="/campaigns" replace />} />
             <Route path="users" element={<Users />} />
+            <Route path="agents" element={<Agents />} />
           </Route>
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

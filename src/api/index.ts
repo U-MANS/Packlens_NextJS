@@ -121,6 +121,63 @@ export async function deleteUser(id: string): Promise<void> {
   await apiFetch(`/users/${id}`, { method: 'DELETE' });
 }
 
+// ─── Agents ──────────────────────────────────────────────────────────────────
+
+export type AgentRole = 'Marketing' | 'I+D';
+
+export interface ApiAgent {
+  id: string;
+  name: string;
+  prompt: string;
+  role: AgentRole;
+  status: 'Activo' | 'Inactivo';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgentCreatePayload {
+  name: string;
+  prompt: string;
+  role: AgentRole;
+  status?: 'Activo' | 'Inactivo';
+}
+
+export interface AgentUpdatePayload {
+  name?: string;
+  prompt?: string;
+  role?: AgentRole;
+  status?: 'Activo' | 'Inactivo';
+}
+
+export async function listAgents(params?: {
+  role?: string;
+  status?: string;
+}): Promise<ApiAgent[]> {
+  const q = new URLSearchParams();
+  if (params?.role) q.set('role', params.role);
+  if (params?.status) q.set('status', params.status);
+  const query = q.toString();
+  return apiFetch<ApiAgent[]>(`/agents${query ? `?${query}` : ''}`);
+}
+
+export async function createAgent(payload: AgentCreatePayload): Promise<ApiAgent> {
+  return apiFetch<ApiAgent>('/agents', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateAgent(id: string, payload: AgentUpdatePayload): Promise<ApiAgent> {
+  return apiFetch<ApiAgent>(`/agents/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteAgent(id: string): Promise<void> {
+  await apiFetch(`/agents/${id}`, { method: 'DELETE' });
+}
+
 // ─── Invitations ─────────────────────────────────────────────────────────────
 
 export interface ApiInvitation {
@@ -211,6 +268,10 @@ export interface ProjectCreatePayload {
   design_lead?: string;
   regulatory_contact?: string;
   assignee_user_ids?: string[];
+  marketing_assignee_type?: 'user' | 'agent';
+  marketing_agent_id?: string;
+  regulatory_assignee_type?: 'user' | 'agent';
+  regulatory_agent_id?: string;
   description?: string;
   briefing_notes?: string;
   briefing_refs?: { id: string; name: string; sku: string }[];

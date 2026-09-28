@@ -117,6 +117,15 @@ export interface Project {
   artDeadline?: string;
   regulatoryContact?: string;
   designLead?: string;
+  /** Asignación Marketing: usuario (owner) o agente IA. */
+  marketingAssigneeType?: 'user' | 'agent';
+  marketingAgentId?: string;
+  marketingAgentName?: string;
+  /** Asignación I+D: usuario (regulatoryContact) o agente IA. */
+  regulatoryAssigneeType?: 'user' | 'agent';
+  regulatoryAgentId?: string;
+  regulatoryAgentName?: string;
+  agentReviewRunning?: boolean;
   /** Notas de briefing (campo de actualización vía PATCH). */
   briefingNotes?: string;
   briefing?: ProjectBriefing;

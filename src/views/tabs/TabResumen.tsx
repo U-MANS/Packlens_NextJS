@@ -343,16 +343,35 @@ const DesignPhaseView: React.FC<DesignPhaseProps> = ({ projectId, onPreviewImage
               <p className="text-xs uppercase tracking-wide text-slate-400 font-semibold mb-1">
                 Responsable
               </p>
-              <p className="font-medium text-primary">{project.owner}</p>
+              {project.marketingAssigneeType === 'agent' && project.marketingAgentName ? (
+                <p className="font-medium text-primary inline-flex items-center gap-1.5 flex-wrap">
+                  {project.marketingAgentName}
+                  <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200">
+                    Agente IA
+                  </span>
+                </p>
+              ) : (
+                <p className="font-medium text-primary">{project.owner || '—'}</p>
+              )}
             </div>
-            {project.regulatoryContact && (
+            {(project.regulatoryAssigneeType === 'agent' && project.regulatoryAgentName) ||
+            project.regulatoryContact ? (
               <div>
                 <p className="text-xs uppercase tracking-wide text-slate-400 font-semibold mb-1">
                   Regulatory
                 </p>
-                <p className="font-medium text-primary">{project.regulatoryContact}</p>
+                {project.regulatoryAssigneeType === 'agent' && project.regulatoryAgentName ? (
+                  <p className="font-medium text-primary inline-flex items-center gap-1.5 flex-wrap">
+                    {project.regulatoryAgentName}
+                    <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200">
+                      Agente IA
+                    </span>
+                  </p>
+                ) : (
+                  <p className="font-medium text-primary">{project.regulatoryContact}</p>
+                )}
               </div>
-            )}
+            ) : null}
             <div>
               <p className="text-xs uppercase tracking-wide text-slate-400 font-semibold mb-1">
                 Fecha de lanzamiento

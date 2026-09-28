@@ -68,32 +68,66 @@ export function projectToRead(project: ProjectRow) {
     art_deadline: project.art_deadline ?? null,
     regulatory_contact: project.regulatory_contact ?? null,
     design_lead: project.design_lead ?? null,
+    marketing_assignee_type: (project.marketing_assignee_type as string) ?? 'user',
+    marketing_agent_id: project.marketing_agent_id ?? null,
+    marketing_agent_name: null as string | null,
+    regulatory_assignee_type: (project.regulatory_assignee_type as string) ?? 'user',
+    regulatory_agent_id: project.regulatory_agent_id ?? null,
+    regulatory_agent_name: null as string | null,
+    agent_review_running: Boolean(project.agent_review_running),
     briefing,
     thumbnail,
   };
 }
 
 /**
- * Serializa proyectos renovando preview_url del thumbnail (las firmadas en DB caducan).
+ * Serializa proyectos renovando preview_url del thumbnail (las firmadas en DB caducan)
+ * y resolviendo nombres de agentes asignados.
  */
 export async function projectsToRead(projects: ProjectRow[]) {
   const bases = projects.map(projectToRead);
-  const keys = bases
+  const thumbKeys = bases
     .map((p) => (p.thumbnail?.storage_key as string | undefined) ?? '')
     .filter(Boolean);
-  if (!keys.length) return bases;
 
-  const signed = await getSignedDownloadUrls(keys);
+  const agentIds = [
+    ...new Set(
+      bases
+        .flatMap((p) => [p.marketing_agent_id, p.regulatory_agent_id])
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+
+  const agentNameById = new Map<string, string>();
+  if (agentIds.length) {
+    const admin = (await import('@/lib/supabase/admin')).getAdminClient();
+    const { data: agents } = await admin.from('agents').select('id, name').in('id', agentIds);
+    for (const a of agents ?? []) {
+      agentNameById.set(a.id as string, a.name as string);
+    }
+  }
+
+  const signed = thumbKeys.length ? await getSignedDownloadUrls(thumbKeys) : new Map<string, string>();
+
   return bases.map((p) => {
-    const thumb = p.thumbnail;
-    if (!thumb) return p;
-    const storageKey = thumb.storage_key as string | undefined;
-    if (!storageKey) return p;
-    const fileName = (thumb.name as string | undefined) ?? 'thumbnail';
-    const preview =
-      signed.get(storageKey) ?? proxyDownloadUrl(storageKey, fileName);
-    return {
+    let next = {
       ...p,
+      marketing_agent_name: p.marketing_agent_id
+        ? (agentNameById.get(p.marketing_agent_id as string) ?? null)
+        : null,
+      regulatory_agent_name: p.regulatory_agent_id
+        ? (agentNameById.get(p.regulatory_agent_id as string) ?? null)
+        : null,
+    };
+
+    const thumb = next.thumbnail;
+    if (!thumb) return next;
+    const storageKey = thumb.storage_key as string | undefined;
+    if (!storageKey) return next;
+    const fileName = (thumb.name as string | undefined) ?? 'thumbnail';
+    const preview = signed.get(storageKey) ?? proxyDownloadUrl(storageKey, fileName);
+    return {
+      ...next,
       thumbnail: {
         ...thumb,
         preview_url: preview,

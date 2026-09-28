@@ -12,6 +12,12 @@ const MARKET_LABELS: Record<string, string> = {
   UK: 'Reino Unido',
 };
 
+export type WorkflowOptions = {
+  /** Evita re-disparar el agente (cuando el propio agente aprueba/rechaza). */
+  skipAgentTrigger?: boolean;
+  agentId?: string | null;
+};
+
 export async function getProjectRow(id: string) {
   const admin = getAdminClient();
   const { data, error } = await admin
@@ -52,6 +58,7 @@ async function addPhaseAction(
   phase: string,
   type: string,
   comment?: string | null,
+  agentId?: string | null,
 ) {
   const admin = getAdminClient();
   const { data, error } = await admin
@@ -63,6 +70,7 @@ async function addPhaseAction(
       comment: comment ?? null,
       actor_id: actor.id,
       role: actor.role,
+      agent_id: agentId ?? null,
     })
     .select('*')
     .single();
@@ -70,7 +78,20 @@ async function addPhaseAction(
   return data;
 }
 
-export async function approvePhase(projectId: string, actor: DbUser, comment?: string | null) {
+function maybeScheduleAgent(projectId: string, toPhase: string, options?: WorkflowOptions) {
+  if (options?.skipAgentTrigger) return;
+  if (!isReviewPhase(toPhase) || toPhase === 'Aprobación final') return;
+  void import('@/lib/server/agentReview')
+    .then(({ schedulePhaseAgent }) => schedulePhaseAgent(projectId))
+    .catch((err) => console.error('[agentReview schedule]', projectId, err));
+}
+
+export async function approvePhase(
+  projectId: string,
+  actor: DbUser,
+  comment?: string | null,
+  options?: WorkflowOptions,
+) {
   const admin = getAdminClient();
   const project = await getProjectRow(projectId);
   if (!project) return { error: 'Proyecto no encontrado', status: 404 as const };
@@ -81,7 +102,14 @@ export async function approvePhase(projectId: string, actor: DbUser, comment?: s
   const flowType = (project.flow_type as string | null) ?? null;
   const fromPhase = project.phase as string;
   const toPhase = nextPhase(fromPhase, flowType);
-  const action = await addPhaseAction(projectId, actor, fromPhase, 'approve', comment);
+  const action = await addPhaseAction(
+    projectId,
+    actor,
+    fromPhase,
+    'approve',
+    comment,
+    options?.agentId,
+  );
 
   const updates: Record<string, unknown> = {
     phase: toPhase,
@@ -119,10 +147,17 @@ export async function approvePhase(projectId: string, actor: DbUser, comment?: s
     action.id,
   );
 
+  maybeScheduleAgent(projectId, toPhase, options);
+
   return { data: await reloadProject(projectId) };
 }
 
-export async function rejectPhase(projectId: string, actor: DbUser, comment: string) {
+export async function rejectPhase(
+  projectId: string,
+  actor: DbUser,
+  comment: string,
+  options?: WorkflowOptions,
+) {
   const admin = getAdminClient();
   const project = await getProjectRow(projectId);
   if (!project) return { error: 'Proyecto no encontrado', status: 404 as const };
@@ -133,7 +168,14 @@ export async function rejectPhase(projectId: string, actor: DbUser, comment: str
   const flowType = (project.flow_type as string | null) ?? null;
   const fromPhase = project.phase as string;
   const toPhase = prevPhase(fromPhase, flowType);
-  const action = await addPhaseAction(projectId, actor, fromPhase, 'reject', comment);
+  const action = await addPhaseAction(
+    projectId,
+    actor,
+    fromPhase,
+    'reject',
+    comment,
+    options?.agentId,
+  );
 
   const { error } = await admin
     .from('projects')
@@ -159,6 +201,8 @@ export async function rejectPhase(projectId: string, actor: DbUser, comment: str
     `Fase retrocedida de ${fromPhase} a ${toPhase}`,
     action.id,
   );
+
+  // Tras rechazo se vuelve a fase de trabajo, no de revisión → no dispara agente.
 
   return { data: await reloadProject(projectId) };
 }

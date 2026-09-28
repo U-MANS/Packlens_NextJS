@@ -157,5 +157,11 @@ export async function POST(request: NextRequest, context: Ctx) {
   await admin.from('projects').update(updates).eq('id', id);
   await addActivity(id, user.id, 'DOCUMENT_UPLOADED', `Propuesta subida: ${name} ${version}`);
 
+  const enteredPhase = (updates.phase as string | undefined) ?? currentPhase;
+  if (enteredPhase !== currentPhase) {
+    const { schedulePhaseAgent } = await import('@/lib/server/agentReview');
+    schedulePhaseAgent(id);
+  }
+
   return jsonOk(await proposalToRead(proposal.id), { status: 201 });
 }
