@@ -554,16 +554,22 @@ const NewProject = () => {
     }));
   };
 
+  const isAvFlow = form.flowType === 'Campaña audiovisual';
+
   const errors = useMemo(() => {
     const e: Partial<Record<keyof FormState, string>> = {};
-    if (!form.name.trim()) e.name = 'Nombre obligatorio';
-    if (!form.sku.trim()) e.sku = 'Código de artículo obligatorio';
+    if (!form.name.trim()) e.name = isAvFlow ? 'Nombre de campaña obligatorio' : 'Nombre obligatorio';
+    if (!form.sku.trim()) e.sku = isAvFlow ? 'Código de campaña obligatorio' : 'Código de artículo obligatorio';
     else if (creationMode === 'new' && isSkuTaken(form.sku, projects)) {
-      e.sku = `El código «${form.sku.trim()}» ya está en uso. Edítalo manualmente o cambia el nombre del producto.`;
+      e.sku = `El código «${form.sku.trim()}» ya está en uso. Edítalo manualmente o cambia el nombre.`;
     }
     if (form.markets.length === 0) e.markets = 'Selecciona al menos un mercado';
-    if (form.labelLanguagesFront.length === 0) e.labelLanguagesFront = 'Selecciona al menos un idioma frontal';
-    if (form.labelLanguagesBack.length === 0) e.labelLanguagesBack = 'Selecciona al menos un idioma trasero';
+    if (!isAvFlow) {
+      if (form.labelLanguagesFront.length === 0) e.labelLanguagesFront = 'Selecciona al menos un idioma frontal';
+      if (form.labelLanguagesBack.length === 0) e.labelLanguagesBack = 'Selecciona al menos un idioma trasero';
+    } else if (form.labelLanguages.length === 0) {
+      e.labelLanguages = 'Selecciona al menos un idioma';
+    }
     if (!form.owners.length) e.owners = 'Asigna al menos un responsable';
     if (!form.launchDate) e.launchDate = 'Fecha de lanzamiento requerida';
     if (!form.artDeadline) e.artDeadline = 'Fecha límite de arte requerida';
@@ -578,7 +584,16 @@ const NewProject = () => {
       e.sourceProjectId = 'Selecciona el producto del que crear la nueva versión';
     }
     return e;
-  }, [form, creationMode, projects]);
+  }, [form, creationMode, projects, isAvFlow]);
+
+  const toggleLanguage = (lang: string) => {
+    setForm((prev) => ({
+      ...prev,
+      labelLanguages: prev.labelLanguages.includes(lang)
+        ? prev.labelLanguages.filter((l) => l !== lang)
+        : [...prev.labelLanguages, lang],
+    }));
+  };
 
   const isValid = Object.keys(errors).length === 0;
 
@@ -591,12 +606,14 @@ const NewProject = () => {
         name: form.name.trim(),
         sku: form.sku.trim(),
         flow_type: form.flowType,
-        product_line: form.productLine || undefined,
-        format: form.format || undefined,
+        product_line: isAvFlow ? undefined : form.productLine || undefined,
+        format: isAvFlow ? undefined : form.format || undefined,
         markets: form.markets,
-        label_languages: form.labelLanguages,
-        label_languages_front: form.labelLanguagesFront,
-        label_languages_back: form.labelLanguagesBack,
+        label_languages: isAvFlow
+          ? form.labelLanguages
+          : form.labelLanguages,
+        label_languages_front: isAvFlow ? [] : form.labelLanguagesFront,
+        label_languages_back: isAvFlow ? [] : form.labelLanguagesBack,
         launch_date: form.launchDate || undefined,
         art_deadline: form.artDeadline || undefined,
         owner_name: form.owners[0] ? stripRoleSuffix(form.owners[0]) : undefined,
@@ -862,17 +879,24 @@ const NewProject = () => {
               <CardHeader className="pb-2">
                 <CardTitle>Tipo de flujo</CardTitle>
                 <p className="text-xs text-slate-500 mt-1">
-                  Selecciona el tipo de flujo de aprobación para este proyecto. Exportación y Marca Blanca estarán disponibles en fases posteriores.
+                  Selecciona el tipo de flujo de aprobación. Exportación y Marca Blanca estarán
+                  disponibles en fases posteriores.
                 </p>
               </CardHeader>
               <CardContent className="pt-0">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                   {(
                     [
                       {
                         value: 'Nacional',
                         icon: '🏠',
                         description: 'Distribución en mercado nacional.',
+                        locked: false,
+                      },
+                      {
+                        value: 'Campaña audiovisual',
+                        icon: '🎬',
+                        description: 'Producción y aprobación de piezas audiovisuales.',
                         locked: false,
                       },
                       {
@@ -898,7 +922,7 @@ const NewProject = () => {
                         onClick={() => {
                           if (!locked) setForm((p) => ({ ...p, flowType: value }));
                         }}
-                        className={`flex flex-col items-start gap-1.5 rounded-lg border-2 px-4 py-3 text-left transition-all ${
+                        className={`flex flex-col items-start gap-1.5 rounded-lg border-2 px-3 sm:px-4 py-3 text-left transition-all min-w-0 overflow-hidden ${
                           locked
                             ? 'border-border bg-slate-50 opacity-60 cursor-not-allowed'
                             : active
@@ -906,25 +930,28 @@ const NewProject = () => {
                               : 'border-border bg-white hover:border-accent/40 hover:bg-accent/5'
                         }`}
                       >
-                        <div className="flex items-center gap-2 w-full">
-                          <span className="text-lg leading-none">{icon}</span>
-                          <span
-                            className={`text-sm font-semibold ${active ? 'text-accent' : locked ? 'text-slate-400' : 'text-primary'}`}
-                          >
-                            {value}
-                          </span>
-                          {locked ? (
-                            <span className="ml-auto inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                              <Lock size={12} />
-                              Próximamente
-                            </span>
-                          ) : (
-                            active && (
-                              <span className="ml-auto">
-                                <CheckCircle2 size={16} className="text-accent" />
+                        <div className="flex items-start gap-2 w-full min-w-0">
+                          <span className="text-lg leading-none shrink-0 mt-0.5">{icon}</span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start gap-1.5">
+                              <span
+                                className={`text-sm font-semibold leading-snug break-words ${
+                                  active ? 'text-accent' : locked ? 'text-slate-400' : 'text-primary'
+                                }`}
+                              >
+                                {value}
                               </span>
-                            )
-                          )}
+                              {!locked && active && (
+                                <CheckCircle2 size={16} className="text-accent shrink-0 mt-0.5" />
+                              )}
+                            </div>
+                            {locked && (
+                              <span className="mt-1 inline-flex items-center gap-1 max-w-full rounded bg-slate-200/80 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-500">
+                                <Lock size={10} className="shrink-0" />
+                                <span className="truncate">Próximamente</span>
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <span className={`text-xs leading-snug ${locked ? 'text-slate-400' : 'text-slate-500'}`}>
                           {description}
@@ -936,22 +963,30 @@ const NewProject = () => {
               </CardContent>
             </Card>
 
-            {/* Información del producto */}
+            {/* Información del producto / campaña */}
             <Card>
               <CardHeader>
-                <CardTitle>Información del producto</CardTitle>
+                <CardTitle>
+                  {isAvFlow ? 'Información de la campaña' : 'Información del producto'}
+                </CardTitle>
                 <p className="text-xs text-slate-500 mt-1">
-                  Identifica el código de artículo y el formato base del nuevo packaging.
+                  {isAvFlow
+                    ? 'Identifica la campaña audiovisual y su código interno.'
+                    : 'Identifica el código de artículo y el formato base del nuevo packaging.'}
                 </p>
               </CardHeader>
               <CardContent className="space-y-5">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <Field label="Nombre del producto" required>
+                  <Field label={isAvFlow ? 'Nombre de la campaña' : 'Nombre del producto'} required>
                     <input
                       type="text"
                       value={form.name}
                       onChange={(e) => onNameChange(e.target.value)}
-                      placeholder="Ej. Mermelada de Fresa Helios 340g"
+                      placeholder={
+                        isAvFlow
+                          ? 'Ej. Spot verano Helios 2026'
+                          : 'Ej. Mermelada de Fresa Helios 340g'
+                      }
                       className={inputClass}
                     />
                     {submitAttempted && errors.name && (
@@ -959,7 +994,11 @@ const NewProject = () => {
                     )}
                   </Field>
 
-                  <Field label="Código de artículo" required hint="Auto-sugerido a partir del nombre, editable.">
+                  <Field
+                    label={isAvFlow ? 'Código de campaña' : 'Código de artículo'}
+                    required
+                    hint="Auto-sugerido a partir del nombre, editable."
+                  >
                     <div className="relative">
                       <Hash
                         size={14}
@@ -972,7 +1011,7 @@ const NewProject = () => {
                           setSkuTouched(true);
                           update('sku', e.target.value.toUpperCase());
                         }}
-                        placeholder="MER-FRE-340"
+                        placeholder={isAvFlow ? 'CAM-SPOT-2026' : 'MER-FRE-340'}
                         className={`${inputClass} pl-9 font-mono tracking-wide`}
                       />
                     </div>
@@ -981,33 +1020,37 @@ const NewProject = () => {
                     )}
                   </Field>
 
-                  <Field label="Gama">
-                    <select
-                      value={form.productLine}
-                      onChange={(e) => update('productLine', e.target.value)}
-                      className={inputClass}
-                    >
-                      <option value="">Selecciona una gama…</option>
-                      {productLines.map((line) => (
-                        <option key={line} value={line}>
-                          {line}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
+                  {!isAvFlow && (
+                    <>
+                      <Field label="Gama">
+                        <select
+                          value={form.productLine}
+                          onChange={(e) => update('productLine', e.target.value)}
+                          className={inputClass}
+                        >
+                          <option value="">Selecciona una gama…</option>
+                          {productLines.map((line) => (
+                            <option key={line} value={line}>
+                              {line}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
 
-                  <Field label="Formato" hint="Tipo de envase y capacidad.">
-                    <select
-                      value={form.format}
-                      onChange={(e) => update('format', e.target.value)}
-                      className={inputClass}
-                    >
-                      <option value="">Selecciona un formato…</option>
-                      {formatOptions.map((f) => (
-                        <option key={f} value={f}>{f}</option>
-                      ))}
-                    </select>
-                  </Field>
+                      <Field label="Formato" hint="Tipo de envase y capacidad.">
+                        <select
+                          value={form.format}
+                          onChange={(e) => update('format', e.target.value)}
+                          className={inputClass}
+                        >
+                          <option value="">Selecciona un formato…</option>
+                          {formatOptions.map((f) => (
+                            <option key={f} value={f}>{f}</option>
+                          ))}
+                        </select>
+                      </Field>
+                    </>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -1015,9 +1058,13 @@ const NewProject = () => {
             {/* Mercados e idiomas */}
             <Card>
               <CardHeader>
-                <CardTitle>Mercados e idiomas de etiqueta</CardTitle>
+                <CardTitle>
+                  {isAvFlow ? 'Mercados e idiomas' : 'Mercados e idiomas de etiqueta'}
+                </CardTitle>
                 <p className="text-xs text-slate-500 mt-1">
-                  Selecciona todos los mercados destino y los idiomas que tendrá la etiqueta.
+                  {isAvFlow
+                    ? 'Selecciona los mercados destino y los idiomas de la campaña.'
+                    : 'Selecciona todos los mercados destino y los idiomas que tendrá la etiqueta.'}
                 </p>
               </CardHeader>
               <CardContent className="space-y-5">
@@ -1042,45 +1089,69 @@ const NewProject = () => {
                   )}
                 </div>
 
-                <div>
-                  <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
-                    Idiomas de etiqueta — Cara frontal <span className="text-red-500">*</span>
-                  </span>
-                  <div className="flex flex-wrap gap-2">
-                    {availableLanguages.map((l) => (
-                      <Chip
-                        key={l}
-                        active={form.labelLanguagesFront.includes(l)}
-                        onClick={() => toggleLanguageFront(l)}
-                      >
-                        {l}
-                      </Chip>
-                    ))}
+                {isAvFlow ? (
+                  <div>
+                    <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
+                      Idiomas <span className="text-red-500">*</span>
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {availableLanguages.map((l) => (
+                        <Chip
+                          key={l}
+                          active={form.labelLanguages.includes(l)}
+                          onClick={() => toggleLanguage(l)}
+                        >
+                          {l}
+                        </Chip>
+                      ))}
+                    </div>
+                    {submitAttempted && errors.labelLanguages && (
+                      <span className="text-xs text-red-500 mt-2 block">{errors.labelLanguages}</span>
+                    )}
                   </div>
-                  {submitAttempted && errors.labelLanguagesFront && (
-                    <span className="text-xs text-red-500 mt-2 block">{errors.labelLanguagesFront}</span>
-                  )}
-                </div>
+                ) : (
+                  <>
+                    <div>
+                      <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
+                        Idiomas de etiqueta — Cara frontal <span className="text-red-500">*</span>
+                      </span>
+                      <div className="flex flex-wrap gap-2">
+                        {availableLanguages.map((l) => (
+                          <Chip
+                            key={l}
+                            active={form.labelLanguagesFront.includes(l)}
+                            onClick={() => toggleLanguageFront(l)}
+                          >
+                            {l}
+                          </Chip>
+                        ))}
+                      </div>
+                      {submitAttempted && errors.labelLanguagesFront && (
+                        <span className="text-xs text-red-500 mt-2 block">{errors.labelLanguagesFront}</span>
+                      )}
+                    </div>
 
-                <div>
-                  <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
-                    Idiomas de etiqueta — Cara trasera <span className="text-red-500">*</span>
-                  </span>
-                  <div className="flex flex-wrap gap-2">
-                    {availableLanguages.map((l) => (
-                      <Chip
-                        key={l}
-                        active={form.labelLanguagesBack.includes(l)}
-                        onClick={() => toggleLanguageBack(l)}
-                      >
-                        {l}
-                      </Chip>
-                    ))}
-                  </div>
-                  {submitAttempted && errors.labelLanguagesBack && (
-                    <span className="text-xs text-red-500 mt-2 block">{errors.labelLanguagesBack}</span>
-                  )}
-                </div>
+                    <div>
+                      <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
+                        Idiomas de etiqueta — Cara trasera <span className="text-red-500">*</span>
+                      </span>
+                      <div className="flex flex-wrap gap-2">
+                        {availableLanguages.map((l) => (
+                          <Chip
+                            key={l}
+                            active={form.labelLanguagesBack.includes(l)}
+                            onClick={() => toggleLanguageBack(l)}
+                          >
+                            {l}
+                          </Chip>
+                        ))}
+                      </div>
+                      {submitAttempted && errors.labelLanguagesBack && (
+                        <span className="text-xs text-red-500 mt-2 block">{errors.labelLanguagesBack}</span>
+                      )}
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
 

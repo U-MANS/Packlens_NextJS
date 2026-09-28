@@ -35,6 +35,8 @@ export const UploadDesignModal: React.FC<UploadDesignModalProps> = ({
   onSubmitted,
 }) => {
   const addDesignProposal = useAppStore((s) => s.addDesignProposal);
+  const project = useAppStore((s) => s.projects.find((p) => p.id === projectId));
+  const isAvFlow = project?.flowType === 'Campaña audiovisual';
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const isDesarrollo = currentPhase === 'Creación Desarrollo';
@@ -116,7 +118,13 @@ export const UploadDesignModal: React.FC<UploadDesignModalProps> = ({
     }
   };
 
-  const nextPhaseLabel = isDesarrollo ? 'Validación diseño' : 'Aprobación Diseño';
+  const nextPhaseLabel = isDesarrollo
+    ? isAvFlow
+      ? 'Aprobación Marketing'
+      : 'Validación diseño'
+    : isAvFlow
+      ? 'Aprobación Marketing'
+      : 'Aprobación Diseño';
 
   const title = isDesarrollo
     ? 'Subir archivo de desarrollo'
@@ -252,8 +260,8 @@ export const UploadDesignModal: React.FC<UploadDesignModalProps> = ({
             type="file"
             multiple
             accept={
-              isDesarrollo
-                ? 'image/*,.pdf,.ai,.psd,.zip,application/zip'
+              isDesarrollo || isAvFlow
+                ? 'image/*,video/*,.mp4,.mov,.webm,.pdf,.ai,.psd,.zip,application/zip'
                 : 'image/*,.pdf,.ai,.psd'
             }
             className="hidden"

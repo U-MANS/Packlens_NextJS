@@ -141,9 +141,15 @@ export async function POST(request: NextRequest, context: Ctx) {
   }
 
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  const flowType = (project.flow_type as string | null) ?? null;
   if (currentPhase === 'Creación Desarrollo') {
-    updates.phase = 'Validación diseño';
-    updates.status = PHASE_TO_STATUS['Validación diseño'];
+    if (flowType === 'Campaña audiovisual') {
+      updates.phase = 'Aprobación Diseño';
+      updates.status = PHASE_TO_STATUS['Aprobación Diseño'];
+    } else {
+      updates.phase = 'Validación diseño';
+      updates.status = PHASE_TO_STATUS['Validación diseño'];
+    }
   } else if (currentPhase === 'Diseño') {
     updates.phase = 'Aprobación Diseño';
     updates.status = PHASE_TO_STATUS['Aprobación Diseño'];

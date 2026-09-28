@@ -1,4 +1,5 @@
 import type { DbUser } from '@/lib/server/auth';
+import { getSignedDownloadUrls, proxyDownloadUrl } from '@/lib/server/files';
 
 type ProjectRow = Record<string, unknown> & {
   id: string;
@@ -20,7 +21,22 @@ function asList(val: unknown): string[] | null {
   return null;
 }
 
+function extractThumbnail(
+  briefingRaw: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  if (!briefingRaw || typeof briefingRaw.thumbnail !== 'object' || !briefingRaw.thumbnail) {
+    return null;
+  }
+  return briefingRaw.thumbnail as Record<string, unknown>;
+}
+
 export function projectToRead(project: ProjectRow) {
+  const briefingRaw = (project.briefing as Record<string, unknown> | null) ?? null;
+  const thumbnail = extractThumbnail(briefingRaw);
+  const briefing = briefingRaw
+    ? Object.fromEntries(Object.entries(briefingRaw).filter(([k]) => k !== 'thumbnail'))
+    : null;
+
   return {
     id: project.id,
     name: project.name,
@@ -52,8 +68,44 @@ export function projectToRead(project: ProjectRow) {
     art_deadline: project.art_deadline ?? null,
     regulatory_contact: project.regulatory_contact ?? null,
     design_lead: project.design_lead ?? null,
-    briefing: project.briefing ?? null,
+    briefing,
+    thumbnail,
   };
+}
+
+/**
+ * Serializa proyectos renovando preview_url del thumbnail (las firmadas en DB caducan).
+ */
+export async function projectsToRead(projects: ProjectRow[]) {
+  const bases = projects.map(projectToRead);
+  const keys = bases
+    .map((p) => (p.thumbnail?.storage_key as string | undefined) ?? '')
+    .filter(Boolean);
+  if (!keys.length) return bases;
+
+  const signed = await getSignedDownloadUrls(keys);
+  return bases.map((p) => {
+    const thumb = p.thumbnail;
+    if (!thumb) return p;
+    const storageKey = thumb.storage_key as string | undefined;
+    if (!storageKey) return p;
+    const fileName = (thumb.name as string | undefined) ?? 'thumbnail';
+    const preview =
+      signed.get(storageKey) ?? proxyDownloadUrl(storageKey, fileName);
+    return {
+      ...p,
+      thumbnail: {
+        ...thumb,
+        preview_url: preview,
+        download_url: proxyDownloadUrl(storageKey, fileName),
+      },
+    };
+  });
+}
+
+export async function projectToReadFresh(project: ProjectRow) {
+  const [fresh] = await projectsToRead([project]);
+  return fresh;
 }
 
 export type { DbUser };

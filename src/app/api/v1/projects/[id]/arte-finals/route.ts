@@ -31,12 +31,6 @@ async function arteToRead(arteId: string) {
   };
 }
 
-function isZip(file: File) {
-  const name = file.name.toLowerCase();
-  const type = (file.type || '').toLowerCase();
-  return name.endsWith('.zip') || type.includes('zip');
-}
-
 export async function GET(request: NextRequest, context: Ctx) {
   const user = await requireUser(request);
   if (user instanceof Response) return user;
@@ -65,7 +59,6 @@ export async function POST(request: NextRequest, context: Ctx) {
   const form = await request.formData();
   const file = form.get('file');
   if (!(file instanceof File)) return jsonError('Archivo requerido', 400);
-  if (!isZip(file)) return jsonError('El arte final debe ser un archivo ZIP (.zip)', 400);
 
   const att = await createAttachmentFromFile(file, `projects/${id}/arte-final`);
   const admin = getAdminClient();

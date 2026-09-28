@@ -26,7 +26,6 @@ import type {
   Task,
 } from '../types';
 import { PHASE_TOAST } from '../utils/phase';
-import { isZipFile } from '../utils/files';
 import { toast } from '../components/ui/Toast';
 import { getErrorMessage } from '../utils/errors';
 import { useAuthStore } from './useAuthStore';
@@ -72,6 +71,8 @@ interface AppState {
   addProject: (payload: api.ProjectCreatePayload, briefingFiles?: File[]) => Promise<string>;
   updateProject: (projectId: string, patch: Partial<Project>) => Promise<void>;
   uploadBriefingFiles: (projectId: string, files: File[]) => Promise<void>;
+  uploadProjectThumbnail: (projectId: string, file: File) => Promise<void>;
+  deleteProjectThumbnail: (projectId: string) => Promise<void>;
   deleteProject: (projectId: string) => Promise<void>;
   markDiscontinued: (projectId: string) => Promise<void>;
 
@@ -250,6 +251,28 @@ export const useAppStore = create<AppState>()((set, get) => ({
       toast.success('Archivos de briefing añadidos');
     }, 'Error subiendo archivos de briefing'),
 
+  uploadProjectThumbnail: async (projectId, file) =>
+    runApi(async () => {
+      const updated = await api.uploadProjectThumbnail(projectId, file);
+      const mapped = mapProject(updated);
+      set((s) => ({
+        projects: s.projects.map((p) => (p.id === projectId ? { ...p, ...mapped } : p)),
+      }));
+      toast.success('Thumbnail actualizado');
+    }, 'Error subiendo thumbnail'),
+
+  deleteProjectThumbnail: async (projectId) =>
+    runApi(async () => {
+      const updated = await api.deleteProjectThumbnail(projectId);
+      const mapped = mapProject(updated);
+      set((s) => ({
+        projects: s.projects.map((p) =>
+          p.id === projectId ? { ...p, ...mapped, thumbnail: undefined } : p,
+        ),
+      }));
+      toast.success('Thumbnail eliminado');
+    }, 'Error eliminando thumbnail'),
+
   deleteProject: async (projectId) =>
     runApi(async () => {
       const updated = await api.archiveProject(projectId);
@@ -379,10 +402,6 @@ export const useAppStore = create<AppState>()((set, get) => ({
 
   addArteFinal: async (projectId, file) =>
     runApi(async () => {
-      if (!isZipFile(file)) {
-        toast.error('El arte final debe ser un archivo ZIP (.zip)');
-        return;
-      }
       await api.uploadArteFinal(projectId, file);
       await get().loadProjectDetail(projectId);
       toast.success('Arte final subido correctamente');

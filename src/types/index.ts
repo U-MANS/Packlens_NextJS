@@ -45,6 +45,17 @@ export interface BriefingFile {
   mimeType: string;
 }
 
+/** Miniatura del producto para listados / cabecera. */
+export interface ProjectThumbnail {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  fileSizeKb: number;
+  dataUrl: string;
+  downloadUrl?: string;
+  uploadedAt?: string;
+}
+
 export interface ProjectBriefing {
   /** Archivos adjuntos del briefing (uno o varios). */
   files?: BriefingFile[];
@@ -60,14 +71,14 @@ export interface ProjectBriefing {
   mimeType?: string;
 }
 
-export type FlowType = 'Nacional' | 'Exportación' | 'Marca Blanca';
+export type FlowType = 'Nacional' | 'Exportación' | 'Marca Blanca' | 'Campaña audiovisual';
 
 export interface Project {
   id: string;
   name: string;
   sku: string;
   market: string;
-  /** Tipo de flujo de aprobación: Nacional, Exportación o Marca Blanca. */
+  /** Tipo de flujo de aprobación. */
   flowType?: FlowType;
   language: string;
   status: ProjectStatus;
@@ -109,6 +120,8 @@ export interface Project {
   /** Notas de briefing (campo de actualización vía PATCH). */
   briefingNotes?: string;
   briefing?: ProjectBriefing;
+  /** Miniatura del producto (opcional). */
+  thumbnail?: ProjectThumbnail;
 }
 
 export interface ProjectDocument {
@@ -255,6 +268,8 @@ export interface ProjectAttachment {
   /** Descarga autenticada vía API — no expone Supabase. */
   downloadUrl?: string;
   isImage: boolean;
+  /** true si el archivo es un vídeo */
+  isVideo?: boolean;
   /** true si el archivo es un PDF */
   isPdf?: boolean;
   /** Número total de páginas (solo para PDFs) */
@@ -312,11 +327,11 @@ export interface ImageAnnotation {
   proposalId: string;
   attachmentId: string;
   text: string;
-  /** Coordenadas relativas al ancho/alto de la imagen (0..1). Si no hay, es un comentario sin pin. */
+  /** Coordenadas relativas al ancho/alto de la imagen/vídeo (0..1). */
   position?: { x: number; y: number };
   /**
-   * Número de página del PDF donde se realizó la anotación (1-indexed).
-   * Para imágenes normales es siempre 1 (o undefined → se trata como 1).
+   * Imagen/PDF: número de página (1-indexed).
+   * Vídeo: instante en milisegundos (Math.round(time * 1000)).
    */
   page?: number;
   phase: ProjectPhase;

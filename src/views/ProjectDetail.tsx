@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, NavLink, Routes, Route, Navigate } from 'react-router-dom';
-import { ArrowLeft, Edit3, Pencil, Upload, Hash } from 'lucide-react';
+import { ArrowLeft, Edit3, Image as ImageIcon, Pencil, Upload, Hash } from 'lucide-react';
 
 import { useAppStore } from '../store/useAppStore';
 import { StatusBadge } from '../components/ui/Badge';
@@ -147,12 +147,17 @@ const ProjectDetail = () => {
     setEditOpen(true);
   };
 
+  const isAvFlow = project.flowType === 'Campaña audiovisual';
   const uploadLabel =
     project.phase === 'Creación Desarrollo'
-      ? 'Subir archivo de desarrollo'
+      ? isAvFlow
+        ? 'Subir audiovisual'
+        : 'Subir archivo de desarrollo'
       : project.phase === 'Aprobación Diseño'
         ? 'Añadir archivos'
-        : 'Subir propuesta de diseño';
+        : project.phase === 'Arte final' && isAvFlow
+          ? 'Subir masters'
+          : 'Subir propuesta de diseño';
 
   return (
     <div className="flex flex-col h-full">
@@ -209,6 +214,29 @@ const ProjectDetail = () => {
                 >
                   <Hash size={12} /> Asignar código SAP
                 </button>
+              )}
+
+              {project.thumbnail?.dataUrl && (
+                <div className="relative group/thumb">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 border border-slate-200 bg-white px-2 py-1 rounded-md cursor-default"
+                    aria-label="Vista previa del thumbnail"
+                  >
+                    <ImageIcon size={12} className="text-slate-400" />
+                    Thumbnail
+                  </button>
+                  <div className="pointer-events-none absolute left-0 top-full z-30 mt-2 opacity-0 scale-95 group-hover/thumb:opacity-100 group-hover/thumb:scale-100 transition-all duration-150 origin-top-left">
+                    <div className="rounded-lg border border-border bg-white shadow-xl p-1.5">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={project.thumbnail.dataUrl}
+                        alt={`Thumbnail de ${project.name}`}
+                        className="w-44 h-44 object-cover rounded-md"
+                      />
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
           </div>

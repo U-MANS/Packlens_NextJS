@@ -1,7 +1,7 @@
 import { getAdminClient } from '@/lib/supabase/admin';
 import type { DbUser } from '@/lib/server/auth';
 import { PHASE_TO_STATUS, nextPhase, prevPhase, isReviewPhase } from '@/lib/server/phase';
-import { projectToRead } from '@/lib/server/serializers';
+import { projectToReadFresh } from '@/lib/server/serializers';
 
 const MARKET_LABELS: Record<string, string> = {
   ES: 'España',
@@ -26,7 +26,7 @@ export async function getProjectRow(id: string) {
 export async function reloadProject(id: string) {
   const row = await getProjectRow(id);
   if (!row) return null;
-  return projectToRead(row as Parameters<typeof projectToRead>[0]);
+  return projectToReadFresh(row as Parameters<typeof projectToReadFresh>[0]);
 }
 
 async function addActivity(
@@ -74,12 +74,13 @@ export async function approvePhase(projectId: string, actor: DbUser, comment?: s
   const admin = getAdminClient();
   const project = await getProjectRow(projectId);
   if (!project) return { error: 'Proyecto no encontrado', status: 404 as const };
-  if (!isReviewPhase(project.phase)) {
+  if (!isReviewPhase(project.phase as string)) {
     return { error: `La fase '${project.phase}' no es de revisión`, status: 400 as const };
   }
 
+  const flowType = (project.flow_type as string | null) ?? null;
   const fromPhase = project.phase as string;
-  const toPhase = nextPhase(fromPhase);
+  const toPhase = nextPhase(fromPhase, flowType);
   const action = await addPhaseAction(projectId, actor, fromPhase, 'approve', comment);
 
   const updates: Record<string, unknown> = {
@@ -125,12 +126,13 @@ export async function rejectPhase(projectId: string, actor: DbUser, comment: str
   const admin = getAdminClient();
   const project = await getProjectRow(projectId);
   if (!project) return { error: 'Proyecto no encontrado', status: 404 as const };
-  if (!isReviewPhase(project.phase)) {
+  if (!isReviewPhase(project.phase as string)) {
     return { error: `La fase '${project.phase}' no es de revisión`, status: 400 as const };
   }
 
+  const flowType = (project.flow_type as string | null) ?? null;
   const fromPhase = project.phase as string;
-  const toPhase = prevPhase(fromPhase);
+  const toPhase = prevPhase(fromPhase, flowType);
   const action = await addPhaseAction(projectId, actor, fromPhase, 'reject', comment);
 
   const { error } = await admin

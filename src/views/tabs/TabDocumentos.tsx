@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive,
   CheckCircle2,
@@ -8,6 +8,7 @@ import {
   FileText,
   FolderOpen,
   Image as ImageIcon,
+  ImagePlus,
   Loader2,
   ScanText,
   X,
@@ -20,6 +21,7 @@ import type { PdfPageText } from '../../utils/pdfRenderer';
 import { formatFileSize, downloadAttachment } from '../../utils/files';
 import { formatDate } from '../../utils/dates';
 import type { ProjectPhase } from '../../types';
+import { toast } from '../../components/ui/Toast';
 
 // ─── Phase colours ───────────────────────────────────────────────────────────
 
@@ -418,9 +420,22 @@ const PhaseGroup: React.FC<{
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export const TabDocumentos = ({ projectId }: { projectId: string }) => {
-  const { projects, designProposals, arteFinals, reviewRefAttachments } = useAppStore();
+  const {
+    projects,
+    designProposals,
+    arteFinals,
+    reviewRefAttachments,
+    activeRole,
+    uploadProjectThumbnail,
+    deleteProjectThumbnail,
+  } = useAppStore();
   const project = projects.find((p) => p.id === projectId);
   const [pdfPreview, setPdfPreview] = useState<DocEntry | null>(null);
+  const [uploadingThumb, setUploadingThumb] = useState(false);
+  const thumbInputRef = useRef<HTMLInputElement>(null);
+
+  const canEditThumbnail =
+    activeRole === 'Admin' || activeRole === 'Marketing' || activeRole === 'Diseño';
 
   const allEntries = useMemo<DocEntry[]>(() => {
     const entries: DocEntry[] = [];
@@ -571,10 +586,28 @@ export const TabDocumentos = ({ projectId }: { projectId: string }) => {
     });
   };
 
+  const handleThumbnailPick = async (fileList: FileList | null) => {
+    const file = fileList?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Selecciona una imagen (PNG, JPG, WebP…)');
+      return;
+    }
+    setUploadingThumb(true);
+    try {
+      await uploadProjectThumbnail(projectId, file);
+    } catch {
+      /* toast ya mostrado por el store */
+    } finally {
+      setUploadingThumb(false);
+      if (thumbInputRef.current) thumbInputRef.current.value = '';
+    }
+  };
+
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h2 className="text-base font-semibold text-primary">Archivos del proyecto</h2>
           <p className="text-xs text-slate-500 mt-0.5">
@@ -582,14 +615,52 @@ export const TabDocumentos = ({ projectId }: { projectId: string }) => {
             {grouped.length} fase{grouped.length !== 1 ? 's' : ''}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={handleDownloadAll}
-          disabled={allEntries.length === 0}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-accent text-white hover:bg-accent-hover text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Download size={15} /> Descargar todos
-        </button>
+        <div className="flex items-center gap-2">
+          {canEditThumbnail && (
+            <>
+              <input
+                ref={thumbInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => void handleThumbnailPick(e.target.files)}
+              />
+              <button
+                type="button"
+                disabled={uploadingThumb}
+                onClick={() => thumbInputRef.current?.click()}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-slate-500 hover:text-primary border border-dashed border-slate-300 hover:border-slate-400 hover:bg-slate-50 transition-colors disabled:opacity-50"
+                title={project?.thumbnail ? 'Cambiar thumbnail' : 'Añadir thumbnail'}
+              >
+                {uploadingThumb ? (
+                  <Loader2 size={13} className="animate-spin" />
+                ) : (
+                  <ImagePlus size={13} />
+                )}
+                {project?.thumbnail ? 'Cambiar thumbnail' : 'Añadir thumbnail'}
+              </button>
+              {project?.thumbnail && (
+                <button
+                  type="button"
+                  disabled={uploadingThumb}
+                  onClick={() => void deleteProjectThumbnail(projectId)}
+                  className="inline-flex items-center px-2 py-1.5 rounded-md text-xs text-slate-400 hover:text-red-500 transition-colors"
+                  title="Quitar thumbnail"
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </>
+          )}
+          <button
+            type="button"
+            onClick={handleDownloadAll}
+            disabled={allEntries.length === 0}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-accent text-white hover:bg-accent-hover text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Download size={15} /> Descargar todos
+          </button>
+        </div>
       </div>
 
       {grouped.length === 0 ? (

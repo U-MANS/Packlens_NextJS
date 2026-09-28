@@ -11,6 +11,15 @@ export const PHASE_ORDER: ProjectPhase[] = [
   'Aprobado',
 ];
 
+/** Pipeline de Campaña audiovisual (reutiliza nombres internos de fase). */
+export const AV_PHASE_ORDER: ProjectPhase[] = [
+  'Creación Desarrollo',
+  'Aprobación Diseño',
+  'Arte final',
+  'Aprobación final',
+  'Aprobado',
+];
+
 export const PHASE_TO_STATUS: Record<ProjectPhase, ProjectStatus> = {
   'Diseño': 'En diseño',
   'Aprobación Diseño': 'En aprobación diseño',
@@ -22,24 +31,50 @@ export const PHASE_TO_STATUS: Record<ProjectPhase, ProjectStatus> = {
   'Aprobado': 'Aprobado',
 };
 
-export const phaseIndex = (phase: ProjectPhase) => PHASE_ORDER.indexOf(phase);
+export function isAudiovisualFlow(flowType?: string | null): boolean {
+  return flowType === 'Campaña audiovisual';
+}
 
-export const nextPhase = (phase: ProjectPhase): ProjectPhase => {
-  const idx = phaseIndex(phase);
-  if (idx < 0 || idx >= PHASE_ORDER.length - 1) return phase;
-  return PHASE_ORDER[idx + 1];
+export function getPhaseOrder(flowType?: string | null): ProjectPhase[] {
+  return isAudiovisualFlow(flowType) ? AV_PHASE_ORDER : PHASE_ORDER;
+}
+
+export function phaseDisplayName(phase: string, flowType?: string | null): string {
+  if (!isAudiovisualFlow(flowType)) return phase;
+  const labels: Record<string, string> = {
+    'Creación Desarrollo': 'Desarrollo',
+    'Aprobación Diseño': 'Aprobación Marketing',
+    'Arte final': 'Masters finales',
+    'Aprobación final': 'Aprobación final',
+    Aprobado: 'Aprobado',
+  };
+  return labels[phase] ?? phase;
+}
+
+export const phaseIndex = (phase: ProjectPhase, flowType?: string | null) =>
+  getPhaseOrder(flowType).indexOf(phase);
+
+export const nextPhase = (phase: ProjectPhase, flowType?: string | null): ProjectPhase => {
+  const order = getPhaseOrder(flowType);
+  const idx = order.indexOf(phase);
+  if (idx < 0 || idx >= order.length - 1) return phase;
+  return order[idx + 1];
 };
 
 /** Returns the phase immediately before the given one, or the same phase if already first. */
-export const prevPhase = (phase: ProjectPhase): ProjectPhase => {
-  const idx = phaseIndex(phase);
+export const prevPhase = (phase: ProjectPhase, flowType?: string | null): ProjectPhase => {
+  const order = getPhaseOrder(flowType);
+  const idx = order.indexOf(phase);
   if (idx <= 0) return phase;
-  return PHASE_ORDER[idx - 1];
+  return order[idx - 1];
 };
 
 /** Fase inmediatamente posterior en el pipeline (origen de un rechazo que devuelve a `phase`). */
-export const rejectionSourcePhase = (phase: ProjectPhase): ProjectPhase | null => {
-  const next = nextPhase(phase);
+export const rejectionSourcePhase = (
+  phase: ProjectPhase,
+  flowType?: string | null,
+): ProjectPhase | null => {
+  const next = nextPhase(phase, flowType);
   return next === phase ? null : next;
 };
 
@@ -51,8 +86,9 @@ export function getLatestIncomingRejection(
   actions: PhaseAction[],
   selectedPhase: ProjectPhase,
   projectId: string,
+  flowType?: string | null,
 ): PhaseAction | undefined {
-  const source = rejectionSourcePhase(selectedPhase);
+  const source = rejectionSourcePhase(selectedPhase, flowType);
   if (!source) return undefined;
   return actions
     .filter(
@@ -73,11 +109,12 @@ export function getPendingIncomingRejection(
   projectId: string,
   projectPhase: ProjectPhase,
   projectStatus: ProjectStatus,
+  flowType?: string | null,
 ): PhaseAction | undefined {
   if (projectPhase !== selectedPhase || projectStatus !== 'Cambios solicitados') {
     return undefined;
   }
-  const rejection = getLatestIncomingRejection(actions, selectedPhase, projectId);
+  const rejection = getLatestIncomingRejection(actions, selectedPhase, projectId, flowType);
   if (!rejection) return undefined;
   const lastApproval = actions
     .filter((a) => a.projectId === projectId && a.phase === selectedPhase && a.type === 'approve')
@@ -218,22 +255,30 @@ export function isPhaseOwnedByRole(role: string, phase: ProjectPhase): boolean {
   return false;
 }
 
-export function phasesOwnedByRole(role: string): ProjectPhase[] {
-  return PHASE_ORDER.filter((phase) => isPhaseOwnedByRole(role, phase));
+export function phasesOwnedByRole(role: string, flowType?: string | null): ProjectPhase[] {
+  return getPhaseOrder(flowType).filter((phase) => isPhaseOwnedByRole(role, phase));
 }
 
-/** Diseño (y Admin) gestionan subida y envío del arte final. */
+/** Diseño (y Admin) gestionan subida y envío del arte final / masters. */
 export const canManageArteFinal = (role: string, phase: ProjectPhase) =>
   (role === 'Diseño' || role === 'Admin') && phase === 'Arte final';
 
 /** Fases en las que Diseño puede gestionar el briefing creativo. */
-export const canManageBriefing = (role: string, phase: ProjectPhase) =>
-  (role === 'Diseño' || role === 'Admin' || role === 'Marketing') &&
-  isDesignUploadPhase(phase);
+export const canManageBriefing = (role: string, phase: ProjectPhase, flowType?: string | null) => {
+  if (!(role === 'Diseño' || role === 'Admin' || role === 'Marketing')) return false;
+  if (isAudiovisualFlow(flowType)) {
+    return phase === 'Creación Desarrollo' || phase === 'Aprobación Diseño';
+  }
+  return isDesignUploadPhase(phase);
+};
 
 /** El proyecto ya superó la aprobación de diseño (no se puede subir desde el paso Diseño). */
-export const hasPassedDesignApproval = (phase: ProjectPhase) =>
-  phaseIndex(phase) > phaseIndex('Aprobación Diseño');
+export const hasPassedDesignApproval = (phase: ProjectPhase, flowType?: string | null) => {
+  if (isAudiovisualFlow(flowType)) {
+    return phaseIndex(phase, flowType) > phaseIndex('Aprobación Diseño', flowType);
+  }
+  return phaseIndex(phase) > phaseIndex('Aprobación Diseño');
+};
 
 /** Mensaje de notificación departamental por fase destino. */
 export const PHASE_TOAST: Record<string, { msg: string; dept: string }> = {

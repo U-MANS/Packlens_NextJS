@@ -73,6 +73,7 @@ export interface ApiProject {
   regulatory_contact?: string | null;
   design_lead?: string | null;
   briefing?: Record<string, unknown> | null;
+  thumbnail?: Record<string, unknown> | null;
 }
 
 export interface ApiProjectDetail extends ApiProject {
@@ -263,10 +264,33 @@ export function mapAttachment(a: ApiAttachment): ProjectAttachment {
     dataUrl,
     downloadUrl,
     isImage: a.is_image,
+    isVideo: (a.mime_type ?? '').startsWith('video/'),
     isPdf: a.is_pdf,
     isZip: a.is_zip,
     pageCount: a.page_count ?? undefined,
     createdAt: a.created_at,
+  };
+}
+
+function mapThumbnail(raw: Record<string, unknown> | null | undefined): Project['thumbnail'] {
+  if (!raw) return undefined;
+  const storageKey = (raw.storage_key as string | undefined) ?? '';
+  const fileName = (raw.name as string) ?? (raw.file_name as string) ?? 'thumbnail';
+  const { dataUrl, downloadUrl } = mapFileAccessUrls(
+    storageKey,
+    fileName,
+    (raw.preview_url as string | undefined) ?? null,
+    (raw.download_url as string | undefined) ?? null,
+  );
+  if (!dataUrl && !storageKey) return undefined;
+  return {
+    id: (raw.id as string) ?? storageKey,
+    fileName,
+    mimeType: (raw.mime_type as string) ?? 'image/jpeg',
+    fileSizeKb: (raw.size_kb as number) ?? (raw.file_size_kb as number) ?? 0,
+    dataUrl,
+    downloadUrl,
+    uploadedAt: (raw.uploaded_at as string | undefined) ?? undefined,
   };
 }
 
@@ -303,6 +327,7 @@ export function mapProject(p: ApiProject): Project {
     regulatoryContact: p.regulatory_contact ?? undefined,
     designLead: p.design_lead ?? undefined,
     briefing: mapBriefing(p.briefing as Record<string, unknown> | null | undefined),
+    thumbnail: mapThumbnail(p.thumbnail as Record<string, unknown> | null | undefined),
   };
 }
 

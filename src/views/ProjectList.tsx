@@ -5,6 +5,7 @@ import {
   Eye,
   Filter,
   GitBranchPlus,
+  Image as ImageIcon,
   MoreHorizontal,
   Plus,
   Search,
@@ -161,6 +162,9 @@ const ProjectRow: React.FC<ProjectRowProps> = ({ project, openMenuId, setOpenMen
   const navigate = useNavigate();
   const { deleteProject, markDiscontinued } = useAppStore();
   const btnRef = useRef<HTMLButtonElement | null>(null);
+  const thumbRef = useRef<HTMLSpanElement | null>(null);
+  const [thumbHover, setThumbHover] = useState(false);
+  const [thumbPos, setThumbPos] = useState<{ top: number; left: number } | null>(null);
 
   const menuOpen = openMenuId === project.id;
 
@@ -169,6 +173,15 @@ const ProjectRow: React.FC<ProjectRowProps> = ({ project, openMenuId, setOpenMen
       ? project.markets
       : [project.language];
   const targetIso = project.launchDate ?? project.targetDate;
+
+  useLayoutEffect(() => {
+    if (!thumbHover || !thumbRef.current) {
+      setThumbPos(null);
+      return;
+    }
+    const rect = thumbRef.current.getBoundingClientRect();
+    setThumbPos({ top: rect.bottom + 6, left: rect.left });
+  }, [thumbHover]);
 
   return (
     <tr
@@ -179,6 +192,18 @@ const ProjectRow: React.FC<ProjectRowProps> = ({ project, openMenuId, setOpenMen
         <div className="flex items-center gap-1.5">
           <span className={project.discontinued ? 'line-through text-slate-400' : ''}>{project.name}</span>
           <VersionBadge version={project.version ?? 1} />
+          {project.thumbnail?.dataUrl && (
+            <span
+              ref={thumbRef}
+              className="inline-flex items-center justify-center text-slate-400 hover:text-accent transition-colors"
+              title="Thumbnail"
+              onClick={(e) => e.stopPropagation()}
+              onMouseEnter={() => setThumbHover(true)}
+              onMouseLeave={() => setThumbHover(false)}
+            >
+              <ImageIcon size={14} />
+            </span>
+          )}
           {project.discontinued && (
             <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700 border border-amber-200">
               Descatalogado
@@ -193,6 +218,23 @@ const ProjectRow: React.FC<ProjectRowProps> = ({ project, openMenuId, setOpenMen
             </span>
           )}
         </div>
+        {thumbHover && thumbPos && project.thumbnail?.dataUrl &&
+          createPortal(
+            <div
+              className="fixed z-[80] pointer-events-none"
+              style={{ top: thumbPos.top, left: thumbPos.left }}
+            >
+              <div className="rounded-lg border border-border bg-white shadow-xl p-1">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={project.thumbnail.dataUrl}
+                  alt={`Thumbnail de ${project.name}`}
+                  className="w-36 h-36 object-cover rounded-md"
+                />
+              </div>
+            </div>,
+            document.body,
+          )}
       </td>
       <td className="px-6 py-4 text-slate-600">
         {project.productLine || project.format ? (

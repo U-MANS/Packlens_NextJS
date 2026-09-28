@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { requireUser } from '@/lib/server/auth';
 import { jsonError, jsonOk } from '@/lib/server/http';
-import { projectToRead } from '@/lib/server/serializers';
+import { projectsToRead } from '@/lib/server/serializers';
 import { getAdminClient } from '@/lib/supabase/admin';
 
 export async function GET(request: NextRequest) {
@@ -17,5 +17,5 @@ export async function GET(request: NextRequest) {
     .limit(10);
 
   if (error) return jsonError(error.message, 500);
-  return jsonOk((data ?? []).map((row) => projectToRead(row as Parameters<typeof projectToRead>[0])));
+  return jsonOk(await projectsToRead((data ?? []) as Parameters<typeof projectsToRead>[0]));
 }

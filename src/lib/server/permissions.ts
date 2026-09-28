@@ -33,7 +33,10 @@ export function canUploadArteFinal(user: DbUser, phase: string): boolean {
 
 export function canManageBriefing(user: DbUser, phase: string): boolean {
   if (user.role === 'Admin' || user.role === 'Marketing') return true;
-  return user.role === 'Diseño' && isDesignUploadPhase(phase);
+  if (user.role === 'Diseño') {
+    return isDesignUploadPhase(phase) || phase === 'Creación Desarrollo';
+  }
+  return false;
 }
 
 export function assertReviewPhase(phase: string): string | null {

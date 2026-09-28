@@ -274,6 +274,21 @@ export async function uploadBriefingFiles(projectId: string, files: File[]): Pro
   });
 }
 
+export async function uploadProjectThumbnail(projectId: string, file: File): Promise<ApiProject> {
+  const form = new FormData();
+  form.append('file', file);
+  return apiFetch<ApiProject>(`/projects/${projectId}/thumbnail`, {
+    method: 'POST',
+    body: form,
+  });
+}
+
+export async function deleteProjectThumbnail(projectId: string): Promise<ApiProject> {
+  return apiFetch<ApiProject>(`/projects/${projectId}/thumbnail`, {
+    method: 'DELETE',
+  });
+}
+
 // ─── Workflow ────────────────────────────────────────────────────────────────
 
 export async function approvePhase(projectId: string, comment?: string): Promise<ApiProject> {
@@ -319,8 +334,6 @@ export async function createProposal(
 
 // ─── Arte final ──────────────────────────────────────────────────────────────
 
-const MAX_ARTE_FINAL_BYTES = 150 * 1024 * 1024;
-
 export async function prepareArteFinalUpload(
   projectId: string,
   file: File,
@@ -329,7 +342,7 @@ export async function prepareArteFinalUpload(
     method: 'POST',
     body: JSON.stringify({
       file_name: file.name,
-      mime_type: file.type || 'application/zip',
+      mime_type: file.type || 'application/octet-stream',
       file_size: file.size,
     }),
   });
@@ -350,16 +363,12 @@ export async function confirmArteFinalUpload(
   });
 }
 
-/** Sube el ZIP directo a Supabase (archivos grandes) y confirma en la API. */
+/** Sube el arte final / master directo a Supabase y confirma en la API. */
 export async function uploadArteFinal(projectId: string, file: File): Promise<ApiArteFinal> {
-  if (file.size > MAX_ARTE_FINAL_BYTES) {
-    throw new ApiError('El ZIP supera el límite de 150 MB', 413);
-  }
-
   try {
     const prepared = await prepareArteFinalUpload(projectId, file);
     const putHeaders: Record<string, string> = {
-      'Content-Type': file.type || 'application/zip',
+      'Content-Type': file.type || 'application/octet-stream',
       'x-upsert': 'true',
     };
     if (prepared.token) {
@@ -375,9 +384,8 @@ export async function uploadArteFinal(projectId: string, file: File): Promise<Ap
       const detail = await putRes.text().catch(() => '');
       if (putRes.status === 413) {
         throw new ApiError(
-          'El ZIP supera el límite de Supabase Storage (plan Free = máx. 50 MB). ' +
-            'Hay que pasar a Pro y subir el Global file size limit en Storage → Settings, ' +
-            'además del límite del bucket packlens-files.',
+          'El archivo supera el límite de Supabase Storage. ' +
+            'Revisa Storage → Settings (Global file size limit) y el bucket packlens-files.',
           413,
           detail,
         );
@@ -396,7 +404,7 @@ export async function uploadArteFinal(projectId: string, file: File): Promise<Ap
     return confirmArteFinalUpload(projectId, {
       storage_key: prepared.storage_key,
       file_name: file.name,
-      mime_type: file.type || 'application/zip',
+      mime_type: file.type || 'application/octet-stream',
       file_size: file.size,
     });
   } catch (e) {

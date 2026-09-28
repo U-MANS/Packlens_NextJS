@@ -21,6 +21,7 @@ import {
 import { toast } from '../../components/ui/Toast';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { ImageAnnotator } from '../../components/ui/ImageAnnotator';
+import { VideoAnnotator } from '../../components/ui/VideoAnnotator';
 import { PdfViewerModal } from '../../components/ui/PdfViewerModal';
 import { ZipExplorer } from '../../components/ui/ZipExplorer';
 import {
@@ -30,7 +31,7 @@ import {
 } from '../../components/modals/PhaseActionModals';
 import { useAppStore } from '../../store/useAppStore';
 import { availableMarkets } from '../../data/mockSeed';
-import { PHASE_ORDER, canApprovePhase, canManageArteFinal, canManageBriefing, getDevelopmentRejectionChain, getPendingIncomingRejection, isReviewPhase } from '../../utils/phase';
+import { canApprovePhase, canManageArteFinal, canManageBriefing, getDevelopmentRejectionChain, getPendingIncomingRejection, getPhaseOrder, isAudiovisualFlow, isReviewPhase, phaseDisplayName } from '../../utils/phase';
 import { formatFileSize, downloadAttachment, isZipAttachment, isZipFile } from '../../utils/files';
 import { renderPdfPage } from '../../utils/pdfRenderer';
 
@@ -77,11 +78,14 @@ interface PipelineProps {
   currentPhase: ProjectPhase;
   selectedPhase: ProjectPhase;
   onSelect: (phase: ProjectPhase) => void;
+  flowType?: string | null;
 }
 
-const Pipeline: React.FC<PipelineProps> = ({ currentPhase, selectedPhase, onSelect }) => {
-  const currentIdx = PHASE_ORDER.indexOf(currentPhase);
+const Pipeline: React.FC<PipelineProps> = ({ currentPhase, selectedPhase, onSelect, flowType }) => {
+  const order = getPhaseOrder(flowType);
+  const currentIdx = Math.max(0, order.indexOf(currentPhase));
   const isProjectApproved = currentPhase === 'Aprobado';
+  const denom = Math.max(1, order.length - 1);
 
   return (
     <div className="flex items-start justify-between relative mt-2">
@@ -90,16 +94,17 @@ const Pipeline: React.FC<PipelineProps> = ({ currentPhase, selectedPhase, onSele
         className={`absolute left-0 top-5 h-1 z-0 transition-all duration-500 ${
           isProjectApproved ? 'bg-emerald-500' : 'bg-accent'
         }`}
-        style={{ width: `${(currentIdx / (PHASE_ORDER.length - 1)) * 100}%` }}
+        style={{ width: `${(currentIdx / denom) * 100}%` }}
       />
 
-      {PHASE_ORDER.map((phase, index) => {
+      {order.map((phase, index) => {
         const isCompleted = index < currentIdx;
         const isCurrent = index === currentIdx;
         const isApproved = isCurrent && phase === 'Aprobado';
         const isFuture = index > currentIdx;
         const isSelected = phase === selectedPhase;
         const clickable = !isFuture;
+        const label = phaseDisplayName(phase, flowType);
 
         const baseCircle =
           'w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all';
@@ -155,7 +160,7 @@ const Pipeline: React.FC<PipelineProps> = ({ currentPhase, selectedPhase, onSele
                         : 'text-slate-400'
               }`}
             >
-              {phase}
+              {label}
             </span>
           </button>
         );
@@ -828,9 +833,13 @@ const AttachmentGallery: React.FC<AttachmentGalleryProps> = ({ attachments, onPr
       </p>
     );
   }
-  // Images and PDFs are both "previewable"
-  const previewable = attachments.filter((a) => a.isImage || a.isPdf);
-  const others = attachments.filter((a) => !a.isImage && !a.isPdf);
+  // Images, PDFs and videos are previewable / annotatable
+  const previewable = attachments.filter(
+    (a) => a.isImage || a.isPdf || a.isVideo || a.mimeType.startsWith('video/'),
+  );
+  const others = attachments.filter(
+    (a) => !(a.isImage || a.isPdf || a.isVideo || a.mimeType.startsWith('video/')),
+  );
 
   return (
     <div className="space-y-4">
@@ -839,6 +848,29 @@ const AttachmentGallery: React.FC<AttachmentGalleryProps> = ({ attachments, onPr
           {previewable.map((att) =>
             att.isPdf ? (
               <PdfThumbnail key={att.id} att={att} onClick={() => onPreviewImage(att)} />
+            ) : att.isVideo || att.mimeType.startsWith('video/') ? (
+              <button
+                key={att.id}
+                type="button"
+                onClick={() => onPreviewImage(att)}
+                className="group relative aspect-video overflow-hidden rounded-lg border border-border bg-slate-900 hover:border-accent transition-colors"
+              >
+                {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                <video
+                  src={att.dataUrl}
+                  className="absolute inset-0 w-full h-full object-cover opacity-90 group-hover:opacity-100"
+                  muted
+                  preload="metadata"
+                />
+                <span className="absolute inset-0 flex items-center justify-center">
+                  <span className="w-10 h-10 rounded-full bg-black/55 text-white flex items-center justify-center text-xs font-semibold">
+                    ▶
+                  </span>
+                </span>
+                <span className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-slate-900/80 to-transparent px-2 py-2 text-[11px] text-white truncate">
+                  {att.fileName}
+                </span>
+              </button>
             ) : (
               <button
                 key={att.id}
@@ -908,6 +940,7 @@ interface ReviewPhaseViewProps {
   canAddDesignFiles?: boolean;
   /** Rechazo de la fase siguiente que devolvió el proyecto aquí (p. ej. Legal → Validación diseño). */
   pendingIncomingRejection?: PhaseAction;
+  flowType?: string | null;
 }
 
 const ReviewPhaseView: React.FC<ReviewPhaseViewProps> = ({
@@ -923,9 +956,12 @@ const ReviewPhaseView: React.FC<ReviewPhaseViewProps> = ({
   activeRole,
   canAddDesignFiles,
   pendingIncomingRejection,
+  flowType,
 }) => {
   const isFinalPhase = selectedPhase === 'Aprobación final';
   const isAprobado = selectedPhase === 'Aprobado';
+  const phaseLabel = phaseDisplayName(selectedPhase, flowType);
+  const isAv = isAudiovisualFlow(flowType);
 
   return (
     <div className="space-y-6">
@@ -1009,10 +1045,26 @@ const ReviewPhaseView: React.FC<ReviewPhaseViewProps> = ({
                     dataUrl={arteFinal.attachment.dataUrl || arteFinal.attachment.downloadUrl || ''}
                     fileName={arteFinal.attachment.fileName}
                   />
+                ) : arteFinal.attachment.isVideo ||
+                  arteFinal.attachment.mimeType.startsWith('video/') ? (
+                  // eslint-disable-next-line jsx-a11y/media-has-caption
+                  <video
+                    src={arteFinal.attachment.dataUrl || arteFinal.attachment.downloadUrl || ''}
+                    controls
+                    className="w-full max-h-80 rounded-lg border border-border bg-black"
+                  />
+                ) : arteFinal.attachment.isImage ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={arteFinal.attachment.dataUrl || arteFinal.attachment.downloadUrl || ''}
+                    alt={arteFinal.attachment.fileName}
+                    className="w-full max-h-80 object-contain rounded-lg border border-border bg-slate-50"
+                  />
                 ) : (
-                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                    Arte final sin formato ZIP. Usa el botón{' '}
-                    {isAprobado ? '«Descargar arte final»' : 'Descargar'} para obtener el archivo.
+                  <div className="rounded-lg border border-border bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                    Archivo:{' '}
+                    <span className="font-medium text-primary">{arteFinal.attachment.fileName}</span>
+                    . Usa «Descargar» para obtenerlo.
                   </div>
                 )}
               </CardContent>
@@ -1030,11 +1082,13 @@ const ReviewPhaseView: React.FC<ReviewPhaseViewProps> = ({
         <Card>
           <CardHeader className="flex flex-row items-start justify-between gap-3">
             <div>
-              <CardTitle>{`Propuesta en revisión · ${selectedPhase}`}</CardTitle>
+              <CardTitle>{`Propuesta en revisión · ${phaseLabel}`}</CardTitle>
               <p className="text-xs text-slate-500 mt-1">
                 {proposal
                   ? `Subida por ${proposal.uploadedBy} el ${formatDateTime(proposal.createdAt)}`
-                  : 'Aún no hay propuesta de diseño asociada.'}
+                  : isAv
+                    ? 'Aún no hay audiovisual asociado.'
+                    : 'Aún no hay propuesta de diseño asociada.'}
               </p>
             </div>
             {proposal && (
@@ -1046,8 +1100,9 @@ const ReviewPhaseView: React.FC<ReviewPhaseViewProps> = ({
           <CardContent className="space-y-5">
             {!proposal && (
               <p className="text-sm text-slate-500">
-                No se ha subido aún una propuesta de diseño para este proyecto. Vuelve a la fase
-                "Diseño" y usa el botón «Subir propuesta de diseño» en la cabecera.
+                {isAv
+                  ? 'No se ha subido aún material audiovisual. Vuelve a la fase «Desarrollo» y usa el botón «Subir audiovisual» en la cabecera.'
+                  : 'No se ha subido aún una propuesta de diseño para este proyecto. Vuelve a la fase «Diseño» y usa el botón «Subir propuesta de diseño» en la cabecera.'}
               </p>
             )}
             {proposal && (
@@ -1226,15 +1281,6 @@ const FinalPrepView: React.FC<FinalPrepViewProps> = ({
 
   const selectFile = (file?: File) => {
     if (!file) return;
-    if (!isZipFile(file)) {
-      toast.error('El arte final debe ser un archivo ZIP (.zip)');
-      return;
-    }
-    const maxBytes = 150 * 1024 * 1024;
-    if (file.size > maxBytes) {
-      toast.error('El ZIP supera el límite de 150 MB');
-      return;
-    }
     setPendingFile(file);
   };
 
@@ -1263,6 +1309,9 @@ const FinalPrepView: React.FC<FinalPrepViewProps> = ({
   };
 
   const isZip = arteFinal ? isZipAttachment(arteFinal.attachment) : false;
+  const pendingIsZip = pendingFile ? isZipFile(pendingFile) : false;
+  const pendingIsVideo = pendingFile?.type.startsWith('video/') ?? false;
+  const pendingIsImage = pendingFile?.type.startsWith('image/') ?? false;
   const canEdit = isCurrent && canManageArteFinal(activeRole, 'Arte final');
   const pendingSizeLabel = pendingFile
     ? formatFileSize(Math.max(1, Math.round(pendingFile.size / 1024)))
@@ -1277,10 +1326,10 @@ const FinalPrepView: React.FC<FinalPrepViewProps> = ({
             <CardTitle>Arte final</CardTitle>
             <p className="text-xs text-slate-500 mt-1">
               {pendingFile
-                ? 'Revisa el contenido del ZIP antes de enviarlo a aprobación final.'
+                ? 'Revisa el archivo antes de enviarlo a aprobación final.'
                 : arteFinal
                   ? `Subido por ${arteFinal.uploadedBy} el ${formatDateTime(arteFinal.createdAt)}`
-                  : 'Selecciona el ZIP de arte final para previsualizarlo antes de enviarlo.'}
+                  : 'Selecciona el archivo de arte final / master para enviarlo a aprobación.'}
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -1311,7 +1360,7 @@ const FinalPrepView: React.FC<FinalPrepViewProps> = ({
           <input
             ref={fileInputRef}
             type="file"
-            accept=".zip,application/zip,application/x-zip-compressed"
+            accept="*/*"
             className="hidden"
             onChange={(e) => {
               selectFile(e.target.files?.[0]);
@@ -1350,7 +1399,23 @@ const FinalPrepView: React.FC<FinalPrepViewProps> = ({
                   </div>
                 )}
               </div>
-              <ZipExplorer dataUrl={pendingBlobUrl} fileName={pendingFile.name} />
+              {pendingIsZip ? (
+                <ZipExplorer dataUrl={pendingBlobUrl} fileName={pendingFile.name} />
+              ) : pendingIsVideo ? (
+                // eslint-disable-next-line jsx-a11y/media-has-caption
+                <video
+                  src={pendingBlobUrl}
+                  controls
+                  className="w-full max-h-80 rounded-lg border border-border bg-black"
+                />
+              ) : pendingIsImage ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={pendingBlobUrl}
+                  alt={pendingFile.name}
+                  className="w-full max-h-80 object-contain rounded-lg border border-border bg-slate-50"
+                />
+              ) : null}
             </div>
           ) : arteFinal && !pendingFile ? (
             isZip ? (
@@ -1358,10 +1423,25 @@ const FinalPrepView: React.FC<FinalPrepViewProps> = ({
                 dataUrl={arteFinal.attachment.dataUrl || arteFinal.attachment.downloadUrl || ''}
                 fileName={arteFinal.attachment.fileName}
               />
+            ) : arteFinal.attachment.isVideo ||
+              arteFinal.attachment.mimeType.startsWith('video/') ? (
+              // eslint-disable-next-line jsx-a11y/media-has-caption
+              <video
+                src={arteFinal.attachment.dataUrl || arteFinal.attachment.downloadUrl || ''}
+                controls
+                className="w-full max-h-80 rounded-lg border border-border bg-black"
+              />
+            ) : arteFinal.attachment.isImage ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={arteFinal.attachment.dataUrl || arteFinal.attachment.downloadUrl || ''}
+                alt={arteFinal.attachment.fileName}
+                className="w-full max-h-80 object-contain rounded-lg border border-border bg-slate-50"
+              />
             ) : (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                Este arte final no está en formato ZIP. Descárgalo y vuelve a subirlo como archivo
-                .zip para usar el explorador de contenidos.
+              <div className="rounded-lg border border-border bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                Archivo listo para descargar:{' '}
+                <span className="font-medium text-primary">{arteFinal.attachment.fileName}</span>
               </div>
             )
           ) : canEdit ? (
@@ -1385,12 +1465,14 @@ const FinalPrepView: React.FC<FinalPrepViewProps> = ({
               </div>
               <div>
                 <p className="text-sm font-medium text-primary">
-                  <span className="text-accent">Haz clic para elegir</span> o arrastra el ZIP de arte final
+                  <span className="text-accent">Haz clic para elegir</span> o arrastra el archivo
                 </p>
-                <p className="text-xs text-slate-500 mt-1">Solo archivos .zip · máx. 150 MB</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  ZIP, vídeo, imagen, PDF u otros formatos
+                </p>
               </div>
               <p className="text-xs text-slate-400 max-w-sm">
-                El archivo se abrirá en el navegador para que puedas revisarlo antes de enviarlo.
+                Podrás revisarlo antes de enviarlo a aprobación final.
               </p>
             </div>
           ) : isCurrent ? (
@@ -1458,7 +1540,7 @@ const FinalPrepView: React.FC<FinalPrepViewProps> = ({
               <p className="text-sm font-medium text-primary">Enviar a aprobación final</p>
               <p className="text-xs text-slate-500">
                 {pendingFile
-                  ? 'Al confirmar, el ZIP se guardará y el proyecto pasará a Aprobación Final.'
+                  ? 'Al confirmar, el archivo se guardará y el proyecto pasará a Aprobación Final.'
                   : 'Confirma el envío del arte final ya subido a la siguiente fase.'}
               </p>
               {submitProgress && (
@@ -1639,12 +1721,26 @@ export const TabResumen = ({
 
   /** Proposal relevant to the currently selected review phase. */
   const proposalForSelectedPhase = useMemo(() => {
-    if (selectedPhase === 'Aprobación Diseño') return latestDesignProposal;
+    const isAv = isAudiovisualFlow(project?.flowType);
+    if (selectedPhase === 'Aprobación Diseño') {
+      // Campaña AV: el material a revisar es el subido en Desarrollo.
+      return isAv
+        ? (latestDesarrolloProposal ?? latestDesignProposal)
+        : latestDesignProposal;
+    }
     if (selectedPhase === 'Validación diseño' || selectedPhase === 'Aprobación Legal') {
       return latestDesarrolloProposal;
     }
+    if (selectedPhase === 'Aprobación final' && isAv) {
+      return latestDesarrolloProposal ?? latestDesignProposal;
+    }
     return latestDesignProposal;
-  }, [selectedPhase, latestDesignProposal, latestDesarrolloProposal]);
+  }, [
+    selectedPhase,
+    latestDesignProposal,
+    latestDesarrolloProposal,
+    project?.flowType,
+  ]);
 
   const projectActions = useMemo(
     () => phaseActions.filter((a) => a.projectId === projectId),
@@ -1667,8 +1763,9 @@ export const TabResumen = ({
       projectId,
       project.phase,
       project.status,
+      project.flowType,
     );
-  }, [projectActions, selectedPhase, projectId, project?.phase, project?.status, project]);
+  }, [projectActions, selectedPhase, projectId, project?.phase, project?.status, project?.flowType, project]);
 
   const developmentRejectionChain = useMemo(
     () =>
@@ -1741,6 +1838,7 @@ export const TabResumen = ({
             currentPhase={project.phase}
             selectedPhase={selectedPhase}
             onSelect={setSelectedPhase}
+            flowType={project.flowType}
           />
         </CardContent>
       </Card>
@@ -1788,6 +1886,7 @@ export const TabResumen = ({
             selectedPhase === 'Aprobación Diseño' ? canAddFilesOnDesignReview : false
           }
           pendingIncomingRejection={pendingIncomingRejection}
+          flowType={project.flowType}
         />
       ) : null}
 
@@ -1811,18 +1910,33 @@ export const TabResumen = ({
       />
 
       {activeAttachment && annotatorProposalResolved && (
-        <ImageAnnotator
-          open={!!activeAttachment}
-          attachment={activeAttachment}
-          proposal={annotatorProposalResolved}
-          projectId={projectId}
-          readOnly={annotatorReadOnly}
-          onClose={() => {
-            setActiveAttachment(null);
-            setAnnotatorProposal(null);
-            setAnnotatorReadOnly(false);
-          }}
-        />
+        (activeAttachment.isVideo || activeAttachment.mimeType.startsWith('video/')) ? (
+          <VideoAnnotator
+            open={!!activeAttachment}
+            attachment={activeAttachment}
+            proposal={annotatorProposalResolved}
+            projectId={projectId}
+            readOnly={annotatorReadOnly}
+            onClose={() => {
+              setActiveAttachment(null);
+              setAnnotatorProposal(null);
+              setAnnotatorReadOnly(false);
+            }}
+          />
+        ) : (
+          <ImageAnnotator
+            open={!!activeAttachment}
+            attachment={activeAttachment}
+            proposal={annotatorProposalResolved}
+            projectId={projectId}
+            readOnly={annotatorReadOnly}
+            onClose={() => {
+              setActiveAttachment(null);
+              setAnnotatorProposal(null);
+              setAnnotatorReadOnly(false);
+            }}
+          />
+        )
       )}
     </div>
   );

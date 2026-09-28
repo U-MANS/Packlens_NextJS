@@ -3,7 +3,7 @@ import { requireUser } from '@/lib/server/auth';
 import { jsonError, jsonOk } from '@/lib/server/http';
 import { attachmentToRead } from '@/lib/server/files';
 import { canManageBriefing } from '@/lib/server/permissions';
-import { projectToRead } from '@/lib/server/serializers';
+import { projectToReadFresh } from '@/lib/server/serializers';
 import { getProjectRow, primaryMarket, reloadProject } from '@/lib/server/workflow';
 import { getAdminClient } from '@/lib/supabase/admin';
 
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest, context: Ctx) {
   if (error) return jsonError(error.message, 500);
   if (!project) return jsonError('Proyecto no encontrado', 404);
 
-  const base = projectToRead(project as Parameters<typeof projectToRead>[0]);
+  const base = await projectToReadFresh(project as Parameters<typeof projectToReadFresh>[0]);
 
   const [
     { data: designProposals },

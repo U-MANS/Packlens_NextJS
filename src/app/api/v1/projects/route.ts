@@ -1,9 +1,10 @@
 import { NextRequest } from 'next/server';
 import { requireUser } from '@/lib/server/auth';
 import { jsonError, jsonOk } from '@/lib/server/http';
-import { projectToRead } from '@/lib/server/serializers';
+import { projectsToRead } from '@/lib/server/serializers';
 import { addActivity, primaryMarket, reloadProject } from '@/lib/server/workflow';
 import { getAdminClient } from '@/lib/supabase/admin';
+import { initialPhaseForFlow, PHASE_TO_STATUS } from '@/lib/server/phase';
 
 export async function GET(request: NextRequest) {
   const user = await requireUser(request);
@@ -43,7 +44,7 @@ export async function GET(request: NextRequest) {
     return jsonError(error.message, 500);
   }
 
-  return jsonOk((data ?? []).map((row) => projectToRead(row as Parameters<typeof projectToRead>[0])));
+  return jsonOk(await projectsToRead((data ?? []) as Parameters<typeof projectsToRead>[0]));
 }
 
 export async function POST(request: NextRequest) {
@@ -103,6 +104,9 @@ export async function POST(request: NextRequest) {
     files: [],
   };
 
+  const flowType = body.flow_type ?? null;
+  const initialPhase = initialPhaseForFlow(flowType);
+
   const { data: project, error } = await admin
     .from('projects')
     .insert({
@@ -110,9 +114,9 @@ export async function POST(request: NextRequest) {
       sku: body.sku,
       market: label,
       language: code,
-      flow_type: body.flow_type ?? null,
-      status: 'En diseño',
-      phase: 'Diseño',
+      flow_type: flowType,
+      status: PHASE_TO_STATUS[initialPhase] ?? 'En diseño',
+      phase: initialPhase,
       owner_id: ownerId,
       target_date: body.launch_date ?? new Date().toISOString().slice(0, 10),
       description: body.description ?? null,

@@ -21,7 +21,13 @@ export function generateStorageKey(prefix: string, fileName: string): string {
   return `${prefix}/${randomUUID()}${ext}`;
 }
 
-export async function getSignedDownloadUrl(storageKey: string, expiresIn = 3600): Promise<string> {
+/** URLs de previsualización: 24h (se renuevan al serializar proyectos). */
+const PREVIEW_URL_TTL_SEC = 60 * 60 * 24;
+
+export async function getSignedDownloadUrl(
+  storageKey: string,
+  expiresIn = PREVIEW_URL_TTL_SEC,
+): Promise<string> {
   const admin = getAdminClient();
   const { data, error } = await admin.storage
     .from(env.storageBucket())
@@ -30,6 +36,37 @@ export async function getSignedDownloadUrl(storageKey: string, expiresIn = 3600)
     throw new Error(error?.message || 'No se pudo firmar URL de descarga');
   }
   return data.signedUrl;
+}
+
+/** Firma en lote varias keys; las que fallen usan el proxy autenticado. */
+export async function getSignedDownloadUrls(
+  storageKeys: string[],
+  expiresIn = PREVIEW_URL_TTL_SEC,
+): Promise<Map<string, string>> {
+  const unique = [...new Set(storageKeys.filter(Boolean))];
+  const result = new Map<string, string>();
+  if (!unique.length) return result;
+
+  const admin = getAdminClient();
+  const { data, error } = await admin.storage
+    .from(env.storageBucket())
+    .createSignedUrls(unique, expiresIn);
+
+  if (error || !data) {
+    for (const key of unique) result.set(key, proxyDownloadUrl(key));
+    return result;
+  }
+
+  for (const item of data) {
+    const key = item.path;
+    if (!key) continue;
+    if (item.signedUrl) result.set(key, item.signedUrl);
+    else result.set(key, proxyDownloadUrl(key));
+  }
+  for (const key of unique) {
+    if (!result.has(key)) result.set(key, proxyDownloadUrl(key));
+  }
+  return result;
 }
 
 export function proxyDownloadUrl(storageKey: string, fileName?: string): string {
