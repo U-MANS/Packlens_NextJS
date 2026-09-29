@@ -48,6 +48,14 @@ const formatOptions = [
   'Lata 825g',
 ];
 
+const campaignTypeOptions = [
+  'Spot TV',
+  'RRSS',
+  'Corporativo',
+  'Banner',
+  'Gran formato',
+] as const;
+
 const FLOW_OPTIONS: { value: FlowType; locked: boolean }[] = [
   { value: 'Nacional', locked: false },
   { value: 'Exportación', locked: true },
@@ -414,7 +422,7 @@ export const CreateProjectFromMoodboardModal: React.FC<Props> = ({
           sku: form.sku.trim(),
           flow_type: form.flowType,
           product_line: isAvFlow ? undefined : form.productLine || undefined,
-          format: isAvFlow ? undefined : form.format || undefined,
+          format: form.format || undefined,
           markets: form.markets,
           label_languages: isAvFlow
             ? form.labelLanguages
@@ -665,7 +673,14 @@ export const CreateProjectFromMoodboardModal: React.FC<Props> = ({
                     key={value}
                     active={form.flowType === value}
                     disabled={locked || submitting}
-                    onClick={() => !locked && update('flowType', value)}
+                    onClick={() =>
+                      !locked &&
+                      setForm((prev) =>
+                        prev
+                          ? { ...prev, flowType: value, format: '' }
+                          : prev,
+                      )
+                    }
                   >
                     {value}
                     {locked ? ' · pronto' : ''}
@@ -674,7 +689,7 @@ export const CreateProjectFromMoodboardModal: React.FC<Props> = ({
               </div>
             </Field>
 
-            {!isAvFlow && (
+            {!isAvFlow ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="Línea de producto">
                   <select
@@ -707,6 +722,22 @@ export const CreateProjectFromMoodboardModal: React.FC<Props> = ({
                   </select>
                 </Field>
               </div>
+            ) : (
+              <Field label="Tipo de campaña" hint="Opcional">
+                <select
+                  className={inputClass}
+                  value={form.format}
+                  onChange={(e) => update('format', e.target.value)}
+                  disabled={submitting}
+                >
+                  <option value="">Sin especificar…</option>
+                  {campaignTypeOptions.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </Field>
             )}
 
             <Field label="Mercados" required error={submitAttempted ? errors.markets : undefined}>

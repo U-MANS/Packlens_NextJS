@@ -313,7 +313,7 @@ const DesignPhaseView: React.FC<DesignPhaseProps> = ({ projectId, onPreviewImage
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 text-sm">
             <div>
               <p className="text-xs uppercase tracking-wide text-slate-400 font-semibold mb-1">
-                Código de artículo
+                {isAudiovisualFlow(project.flowType) ? 'Código de campaña' : 'Código de artículo'}
               </p>
               <p className="font-mono text-primary">{project.sku}</p>
             </div>
@@ -334,7 +334,7 @@ const DesignPhaseView: React.FC<DesignPhaseProps> = ({ projectId, onPreviewImage
             {project.format && (
               <div>
                 <p className="text-xs uppercase tracking-wide text-slate-400 font-semibold mb-1">
-                  Formato
+                  {isAudiovisualFlow(project.flowType) ? 'Tipo de campaña' : 'Formato'}
                 </p>
                 <p className="font-medium text-primary">{project.format}</p>
               </div>

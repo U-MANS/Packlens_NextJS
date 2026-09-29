@@ -69,6 +69,15 @@ function collectAssigneeUserIds(
   return [...new Set(ids)];
 }
 
+/** Tipos de pieza para campañas audiovisuales (se persisten en `format`). */
+const campaignTypeOptions = [
+  'Spot TV',
+  'RRSS',
+  'Corporativo',
+  'Banner',
+  'Gran formato',
+] as const;
+
 const formatOptions = [
   'Tarro vidrio 340g',
   'Tarro vidrio 640g',
@@ -489,7 +498,7 @@ const NewProject = () => {
         sku: form.sku.trim(),
         flow_type: form.flowType,
         product_line: isAvFlow ? undefined : form.productLine || undefined,
-        format: isAvFlow ? undefined : form.format || undefined,
+        format: form.format || undefined,
         markets: form.markets,
         label_languages: isAvFlow
           ? form.labelLanguages
@@ -552,29 +561,48 @@ const NewProject = () => {
     () => [
       { label: 'Flujo', value: form.flowType },
       { label: 'Nombre', value: form.name || '—' },
-      { label: 'Cód. artículo', value: form.sku || '—', mono: true },
-      { label: 'Gama', value: form.productLine || '—' },
-      { label: 'Formato', value: form.format || '—' },
+      {
+        label: isAvFlow ? 'Cód. campaña' : 'Cód. artículo',
+        value: form.sku || '—',
+        mono: true,
+      },
+      ...(isAvFlow
+        ? [{ label: 'Tipo de campaña', value: form.format || '—' }]
+        : [
+            { label: 'Gama', value: form.productLine || '—' },
+            { label: 'Formato', value: form.format || '—' },
+          ]),
       {
         label: 'Mercados',
         value: form.markets.length ? form.markets.join(' · ') : '—',
         mono: true,
       },
-      {
-        label: 'Idiomas frontal',
-        value: form.labelLanguagesFront.length ? form.labelLanguagesFront.join(' · ') : '—',
-      },
-      {
-        label: 'Idiomas trasera',
-        value: form.labelLanguagesBack.length ? form.labelLanguagesBack.join(' · ') : '—',
-      },
+      ...(isAvFlow
+        ? []
+        : [
+            {
+              label: 'Idiomas frontal',
+              value: form.labelLanguagesFront.length
+                ? form.labelLanguagesFront.join(' · ')
+                : '—',
+            },
+            {
+              label: 'Idiomas trasera',
+              value: form.labelLanguagesBack.length
+                ? form.labelLanguagesBack.join(' · ')
+                : '—',
+            },
+          ]),
       { label: 'Lanzamiento', value: form.launchDate || '—' },
       { label: 'Límite arte', value: form.artDeadline || '—' },
       { label: 'Responsable', value: form.owners.length ? form.owners.join(', ') : '—' },
       { label: 'Resp. diseño', value: form.designLeads.length ? form.designLeads.join(', ') : '—' },
-      { label: 'I+D y Calidad', value: form.regulatoryContacts.length ? form.regulatoryContacts.join(', ') : '—' },
+      {
+        label: 'I+D y Calidad',
+        value: form.regulatoryContacts.length ? form.regulatoryContacts.join(', ') : '—',
+      },
     ],
-    [form],
+    [form, isAvFlow],
   );
 
   return (
@@ -812,7 +840,14 @@ const NewProject = () => {
                         type="button"
                         disabled={locked}
                         onClick={() => {
-                          if (!locked) setForm((p) => ({ ...p, flowType: value }));
+                          if (!locked) {
+                            setForm((p) => ({
+                              ...p,
+                              flowType: value,
+                              // Formato packaging ≠ tipo de campaña
+                              format: '',
+                            }));
+                          }
                         }}
                         className={`flex flex-col items-start gap-1.5 rounded-lg border-2 px-3 sm:px-4 py-3 text-left transition-all min-w-0 overflow-hidden ${
                           locked
@@ -912,7 +947,25 @@ const NewProject = () => {
                     )}
                   </Field>
 
-                  {!isAvFlow && (
+                  {isAvFlow ? (
+                    <Field
+                      label="Tipo de campaña"
+                      hint="Opcional. Clasifica la pieza creativa de la campaña."
+                    >
+                      <select
+                        value={form.format}
+                        onChange={(e) => update('format', e.target.value)}
+                        className={inputClass}
+                      >
+                        <option value="">Sin especificar…</option>
+                        {campaignTypeOptions.map((t) => (
+                          <option key={t} value={t}>
+                            {t}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                  ) : (
                     <>
                       <Field label="Gama">
                         <select
