@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, FolderKanban, BookOpen, Bell, Search, User, Users, LogOut, Sparkles, Megaphone, Bot } from 'lucide-react';
+import { LayoutDashboard, FolderKanban, BookOpen, Bell, Search, User, Users, LogOut, Sparkles, Megaphone, Bot, Clock } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useNotificationStore } from '../../store/useNotificationStore';
@@ -121,6 +121,19 @@ const Layout = () => {
           >
             <Megaphone size={18} />
             Campañas
+          </NavLink>
+          <NavLink
+            to="/hours"
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                isActive
+                  ? 'bg-accent/10 text-accent'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`
+            }
+          >
+            <Clock size={18} />
+            Control de horas
           </NavLink>
           {/* Tareas y Ajustes ocultos temporalmente */}
 

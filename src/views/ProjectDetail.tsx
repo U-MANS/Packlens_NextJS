@@ -40,6 +40,7 @@ import { TabComparador } from './tabs/TabComparador';
 import { TabTareas } from './tabs/TabTareas';
 import { TabActividad } from './tabs/TabActividad';
 import { TabMetricas } from './tabs/TabMetricas';
+import { TabHoras } from './tabs/TabHoras';
 
 const ProjectDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -127,6 +128,7 @@ const ProjectDetail = () => {
     { name: 'Comparador', path: 'compare' },
     { name: 'Tareas', path: 'tasks' },
     { name: 'Actividad', path: 'activity' },
+    { name: 'Horas', path: 'hours' },
     { name: 'Métricas', path: 'metrics' },
   ];
 
@@ -324,6 +326,7 @@ const ProjectDetail = () => {
             <Route path="compare" element={<TabComparador projectId={project.id} />} />
             <Route path="tasks" element={<TabTareas projectId={project.id} />} />
             <Route path="activity" element={<TabActividad projectId={project.id} />} />
+            <Route path="hours" element={<TabHoras projectId={project.id} />} />
             <Route path="metrics" element={<TabMetricas projectId={project.id} />} />
             <Route path="*" element={<Navigate to="" replace />} />
           </Routes>

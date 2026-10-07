@@ -664,6 +664,65 @@ export async function generateMoodboard(
   });
 }
 
+// ─── Time entries ────────────────────────────────────────────────────────────
+
+export interface ApiTimeEntry {
+  id: string;
+  project_id: string;
+  project_name?: string | null;
+  project_sku?: string | null;
+  employee_name: string;
+  hours: number;
+  worked_on: string;
+  description?: string | null;
+  created_by?: string | null;
+  created_at: string;
+}
+
+export interface TimeEntryPayload {
+  project_id: string;
+  employee_name: string;
+  hours: number;
+  worked_on: string;
+  description?: string;
+}
+
+export async function listTimeEntries(params?: {
+  project_id?: string;
+  from?: string;
+  to?: string;
+  employee?: string;
+}): Promise<ApiTimeEntry[]> {
+  const q = new URLSearchParams();
+  if (params?.project_id) q.set('project_id', params.project_id);
+  if (params?.from) q.set('from', params.from);
+  if (params?.to) q.set('to', params.to);
+  if (params?.employee) q.set('employee', params.employee);
+  const query = q.toString();
+  return apiFetch<ApiTimeEntry[]>(`/time-entries${query ? `?${query}` : ''}`);
+}
+
+export async function createTimeEntry(payload: TimeEntryPayload): Promise<ApiTimeEntry> {
+  return apiFetch<ApiTimeEntry>('/time-entries', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateTimeEntry(
+  id: string,
+  payload: Partial<TimeEntryPayload>,
+): Promise<ApiTimeEntry> {
+  return apiFetch<ApiTimeEntry>(`/time-entries/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteTimeEntry(id: string): Promise<void> {
+  await apiFetch(`/time-entries/${id}`, { method: 'DELETE' });
+}
+
 // Re-export mappers for convenience
 export {
   mapProject,
