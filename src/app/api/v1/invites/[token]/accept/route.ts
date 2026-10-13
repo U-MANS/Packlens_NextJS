@@ -2,7 +2,11 @@ import { NextRequest } from 'next/server';
 import { jsonError, jsonOk } from '@/lib/server/http';
 import { getAdminClient } from '@/lib/supabase/admin';
 import { signInWithPassword } from '@/lib/supabase/auth';
-import { adminCreateUser } from '@/lib/supabase/admin-users';
+import {
+  adminCreateUser,
+  adminFindUserByEmail,
+  adminUpdateAuthUser,
+} from '@/lib/supabase/admin-users';
 
 type Ctx = { params: Promise<{ token: string }> };
 
@@ -33,14 +37,27 @@ export async function POST(request: NextRequest, context: Ctx) {
     .join('')
     .toUpperCase();
 
+  const authPayload = {
+    email: invite.email as string,
+    password: body.password,
+    name,
+    role: invite.role as string,
+    initials,
+  };
+
   try {
-    await adminCreateUser({
-      email: invite.email,
-      password: body.password,
-      name,
-      role: invite.role,
-      initials,
-    });
+    try {
+      await adminCreateUser(authPayload);
+    } catch {
+      const existing = await adminFindUserByEmail(authPayload.email);
+      if (!existing) throw new Error('No se pudo crear el usuario de la invitación');
+      await adminUpdateAuthUser(existing.id, authPayload);
+    }
+
+    await admin
+      .from('users')
+      .update({ name, role: invite.role, initials, status: 'Activo' })
+      .eq('email', invite.email);
 
     await admin
       .from('invitations')

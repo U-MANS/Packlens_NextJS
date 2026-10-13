@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { RefreshCw, Send, Shield, Trash2, Mail } from 'lucide-react';
+import { RefreshCw, Send, Shield, Trash2, Mail, Link2 } from 'lucide-react';
 import * as api from '../api';
 import type { ApiInvitation } from '../api';
 import { Modal } from '../components/ui/Modal';
@@ -72,6 +72,15 @@ export default function InvitationsPanel() {
             ? `No se pudo enviar el correo: ${result.email_error}`
             : 'Invitación creada, pero no se pudo enviar el correo. Revisa la configuración de email.',
         );
+        const url = result.invite_url ?? result.invitation.invite_url;
+        if (url) {
+          try {
+            await navigator.clipboard.writeText(url);
+            toast.success('Enlace copiado. Puedes enviarlo a mano.');
+          } catch {
+            /* el admin puede copiarlo desde la tabla */
+          }
+        }
       }
       setShowModal(false);
       setForm(EMPTY_FORM);
@@ -93,11 +102,33 @@ export default function InvitationsPanel() {
         toast.success('Invitación reenviada por correo');
       } else {
         toast.error(result.email_error ?? 'No se pudo reenviar el correo');
+        const url = result.invite_url ?? result.invitation.invite_url;
+        if (url) {
+          try {
+            await navigator.clipboard.writeText(url);
+            toast.success('Enlace copiado. Puedes enviarlo a mano.');
+          } catch {
+            /* el admin puede copiarlo desde la tabla */
+          }
+        }
       }
     } catch (err) {
       toast.error(getErrorMessage(err, 'Error al reenviar'));
     } finally {
       setResendingId(null);
+    }
+  };
+
+  const handleCopyLink = async (invitation: ApiInvitation) => {
+    if (!invitation.invite_url) {
+      toast.error('Esta invitación no tiene enlace');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(invitation.invite_url);
+      toast.success('Enlace copiado');
+    } catch {
+      toast.error('No se pudo copiar el enlace');
     }
   };
 
@@ -191,6 +222,16 @@ export default function InvitationsPanel() {
                     <td className="px-4 py-3">
                       {invitation.status === 'pending' && (
                         <div className="flex items-center gap-1">
+                          {invitation.invite_url && (
+                            <button
+                              type="button"
+                              title="Copiar enlace"
+                              onClick={() => void handleCopyLink(invitation)}
+                              className="p-1.5 rounded-md text-slate-400 hover:text-accent hover:bg-accent/10 transition-colors"
+                            >
+                              <Link2 size={15} />
+                            </button>
+                          )}
                           <button
                             type="button"
                             title="Reenviar invitación"

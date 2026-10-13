@@ -190,6 +190,7 @@ export interface ApiInvitation {
   accepted_at?: string | null;
   created_at: string;
   invited_by_name?: string | null;
+  invite_url?: string | null;
 }
 
 export interface InvitationCreatePayload {
@@ -203,6 +204,7 @@ export interface InvitationCreateResponse {
   email_sent: boolean;
   email_message_id?: string | null;
   email_error?: string | null;
+  invite_url?: string | null;
 }
 
 export interface InvitePreview {

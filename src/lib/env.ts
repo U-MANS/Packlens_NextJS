@@ -18,4 +18,8 @@ export const env = {
   storageBucket: () => process.env.SUPABASE_STORAGE_BUCKET ?? 'packlens-files',
   debugSignup: () => process.env.DEBUG_ENABLE_SIGNUP === 'true',
   openaiApiKey: () => process.env.OPENAI_API_KEY || '',
+  frontendBaseUrl: () => (process.env.FRONTEND_BASE_URL || 'http://localhost:3000').replace(/\/$/, ''),
+  brevoApiKey: () => process.env.BREVO_API_KEY?.trim() || '',
+  brevoSenderEmail: () => process.env.BREVO_SENDER_EMAIL?.trim() || 'cristian@weworkfactory.com',
+  brevoSenderName: () => process.env.BREVO_SENDER_NAME?.trim() || 'PackLens',
 };

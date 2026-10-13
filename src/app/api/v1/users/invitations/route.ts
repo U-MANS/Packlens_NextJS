@@ -2,6 +2,7 @@ import { randomBytes } from 'crypto';
 import { NextRequest } from 'next/server';
 import { requireUser } from '@/lib/server/auth';
 import { jsonError, jsonOk } from '@/lib/server/http';
+import { invitationEmailResponse, mapInvitation, sendInvitationEmail } from '@/lib/server/invitations';
 import { canManageUsers } from '@/lib/server/permissions';
 import { getAdminClient } from '@/lib/supabase/admin';
 
@@ -13,22 +14,6 @@ function isMissingInvitationsTable(error: { message?: string; code?: string }) {
     msg.includes('does not exist') ||
     msg.includes("Could not find the table 'public.invitations'")
   );
-}
-
-function mapInvitation(
-  row: Record<string, unknown> & { inviter?: { name?: string } | null },
-) {
-  return {
-    id: row.id,
-    email: row.email,
-    name: row.name ?? null,
-    role: row.role,
-    status: row.status,
-    expires_at: row.expires_at,
-    accepted_at: row.accepted_at ?? null,
-    created_at: row.created_at,
-    invited_by_name: row.inviter?.name ?? null,
-  };
 }
 
 export async function GET(request: NextRequest) {
@@ -92,13 +77,13 @@ export async function POST(request: NextRequest) {
     return jsonError(error.message, 500);
   }
 
-  return jsonOk(
-    {
-      invitation: mapInvitation(data),
-      email_sent: false,
-      email_message_id: null,
-      email_error: 'Envío de email no configurado en Next (la invitación quedó creada).',
-    },
-    { status: 201 },
-  );
+  const email = await sendInvitationEmail({
+    to: body.email,
+    token,
+    role: body.role,
+    name: body.name,
+    inviterName: user.name,
+  });
+
+  return jsonOk(invitationEmailResponse(data, email), { status: 201 });
 }
