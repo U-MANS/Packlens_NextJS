@@ -4,6 +4,7 @@ import { jsonError, jsonOk } from '@/lib/server/http';
 import { attachmentToRead, createAttachmentFromFile } from '@/lib/server/files';
 import { canUploadProposal } from '@/lib/server/permissions';
 import { PHASE_TO_STATUS } from '@/lib/server/phase';
+import { schedulePhaseEntered } from '@/lib/server/phaseNotifications';
 import { addActivity, getProjectRow } from '@/lib/server/workflow';
 import { getAdminClient } from '@/lib/supabase/admin';
 
@@ -161,6 +162,12 @@ export async function POST(request: NextRequest, context: Ctx) {
   if (enteredPhase !== currentPhase) {
     const { schedulePhaseAgent } = await import('@/lib/server/agentReview');
     schedulePhaseAgent(id);
+    schedulePhaseEntered({
+      project,
+      toPhase: enteredPhase,
+      actorId: user.id,
+      actorName: user.name,
+    });
   }
 
   return jsonOk(await proposalToRead(proposal.id), { status: 201 });

@@ -1,6 +1,7 @@
 import { getAdminClient } from '@/lib/supabase/admin';
 import type { DbUser } from '@/lib/server/auth';
 import { PHASE_TO_STATUS, nextPhase, prevPhase, isReviewPhase } from '@/lib/server/phase';
+import { schedulePhaseEntered, schedulePhaseRejected } from '@/lib/server/phaseNotifications';
 import { projectToReadFresh } from '@/lib/server/serializers';
 
 const MARKET_LABELS: Record<string, string> = {
@@ -149,6 +150,13 @@ export async function approvePhase(
 
   maybeScheduleAgent(projectId, toPhase, options);
 
+  schedulePhaseEntered({
+    project,
+    toPhase,
+    actorId: actor.id,
+    actorName: actor.name,
+  });
+
   return { data: await reloadProject(projectId) };
 }
 
@@ -203,6 +211,15 @@ export async function rejectPhase(
   );
 
   // Tras rechazo se vuelve a fase de trabajo, no de revisión → no dispara agente.
+
+  schedulePhaseRejected({
+    project,
+    fromPhase,
+    toPhase,
+    comment,
+    actorId: actor.id,
+    actorName: actor.name,
+  });
 
   return { data: await reloadProject(projectId) };
 }
