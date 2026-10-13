@@ -14,3 +14,6 @@ create table if not exists public.invitations (
 
 create index if not exists invitations_email_idx on public.invitations(email);
 create index if not exists invitations_token_idx on public.invitations(token);
+
+-- La API usa service_role; recarga el cache de PostgREST para que vea la tabla.
+notify pgrst, 'reload schema';

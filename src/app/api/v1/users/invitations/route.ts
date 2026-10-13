@@ -5,6 +5,16 @@ import { jsonError, jsonOk } from '@/lib/server/http';
 import { canManageUsers } from '@/lib/server/permissions';
 import { getAdminClient } from '@/lib/supabase/admin';
 
+function isMissingInvitationsTable(error: { message?: string; code?: string }) {
+  const msg = error.message ?? '';
+  return (
+    error.code === '42P01' ||
+    error.code === 'PGRST205' ||
+    msg.includes('does not exist') ||
+    msg.includes("Could not find the table 'public.invitations'")
+  );
+}
+
 function mapInvitation(
   row: Record<string, unknown> & { inviter?: { name?: string } | null },
 ) {
@@ -33,9 +43,7 @@ export async function GET(request: NextRequest) {
     .order('created_at', { ascending: false });
 
   if (error) {
-    if (error.message.includes('does not exist') || error.code === '42P01') {
-      return jsonOk([]);
-    }
+    if (isMissingInvitationsTable(error)) return jsonOk([]);
     return jsonError(error.message, 500);
   }
   return jsonOk((data ?? []).map((r) => mapInvitation(r)));
@@ -75,9 +83,9 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (error) {
-    if (error.message.includes('does not exist') || error.code === '42P01') {
+    if (isMissingInvitationsTable(error)) {
       return jsonError(
-        'Tabla invitations no existe. Ejecuta supabase/07_invitations.sql en Supabase.',
+        'Tabla invitations no existe. Ejecuta supabase/07_invitations.sql en el SQL Editor de Supabase.',
         501,
       );
     }
