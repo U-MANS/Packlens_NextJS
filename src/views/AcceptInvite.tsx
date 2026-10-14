@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { previewInvite } from '../api';
 import type { InvitePreview } from '../api';
+import { ThemeToggle } from '../components/theme/ThemeToggle';
 import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
 import { getErrorMessage } from '../utils/errors';
@@ -97,7 +98,10 @@ export default function AcceptInvite() {
   const nameLocked = Boolean(preview.name);
 
   return (
-    <div className="min-h-screen bg-secondary flex items-center justify-center p-4">
+    <div className="min-h-screen bg-secondary flex items-center justify-center p-4 relative">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="w-14 h-14 rounded-xl bg-accent flex items-center justify-center text-white text-2xl font-bold mx-auto mb-4">

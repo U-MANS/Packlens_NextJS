@@ -25,11 +25,16 @@ import { formatDate } from '../utils/dates';
 // ─── Lifecycle badge ──────────────────────────────────────────────────────────
 
 const LIFECYCLE_STYLES: Record<LifecycleStatus, string> = {
-  Borrador:       'bg-slate-100 text-slate-600 border-slate-200',
-  'Pendiente SAP':'bg-amber-50 text-amber-700 border-amber-200',
-  Vigente:        'bg-emerald-50 text-emerald-700 border-emerald-200',
-  Temporal:       'bg-blue-50 text-blue-700 border-blue-200',
-  Obsoleta:       'bg-red-50 text-red-600 border-red-200',
+  Borrador:
+    'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-500/20 dark:text-slate-300 dark:border-slate-500/30',
+  'Pendiente SAP':
+    'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/35',
+  Vigente:
+    'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/35',
+  Temporal:
+    'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/15 dark:text-blue-300 dark:border-blue-500/35',
+  Obsoleta:
+    'bg-red-50 text-red-600 border-red-200 dark:bg-red-500/15 dark:text-red-300 dark:border-red-500/35',
 };
 
 const LifecycleBadge = ({ status }: { status: LifecycleStatus | undefined }) => {
@@ -459,7 +464,7 @@ const ProjectList = () => {
       )}
 
       <Card>
-        <CardHeader className="flex flex-col sm:flex-row gap-4 border-b border-border bg-slate-50/50">
+        <CardHeader className="flex flex-col sm:flex-row gap-4 border-b border-border bg-slate-50/50 dark:bg-transparent">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <input

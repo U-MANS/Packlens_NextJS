@@ -4,6 +4,7 @@ import { LayoutDashboard, FolderKanban, BookOpen, Bell, Search, User, Users, Log
 import { useAppStore } from '../../store/useAppStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useNotificationStore } from '../../store/useNotificationStore';
+import { ThemeToggle } from '../theme/ThemeToggle';
 import { Toaster } from '../ui/Toast';
 import { NotificationPanel } from './NotificationPanel';
 import type { Role } from '../../types';
@@ -184,7 +185,7 @@ const Layout = () => {
               <input 
                 type="text" 
                 placeholder="Buscar proyectos, documentos..." 
-                className="w-full pl-10 pr-4 py-2 bg-slate-100 border-transparent rounded-md text-sm focus:bg-white focus:border-accent focus:ring-2 focus:ring-accent/20 outline-none transition-all"
+                className="w-full pl-10 pr-4 py-2 bg-slate-100 border-transparent rounded-md text-sm text-primary placeholder:text-slate-400 focus:bg-white focus:border-accent focus:ring-2 focus:ring-accent/20 outline-none transition-all"
               />
             </div>
           </div>
@@ -212,6 +213,7 @@ const Layout = () => {
               </div>
             )}
 
+            <ThemeToggle />
             <button
               type="button"
               onClick={handleToggleNotifications}

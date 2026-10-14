@@ -60,7 +60,7 @@ export const Modal: React.FC<ModalProps> = ({
       <div
         role="dialog"
         aria-modal="true"
-        className={`relative w-full ${sizeMap[size]} bg-white rounded-xl shadow-2xl border border-border overflow-hidden flex flex-col max-h-[92vh]`}
+        className={`relative w-full ${sizeMap[size]} bg-surface rounded-xl shadow-2xl border border-border overflow-hidden flex flex-col max-h-[92vh]`}
         onClick={(e) => e.stopPropagation()}
       >
         {(title || description) && (

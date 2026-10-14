@@ -35,11 +35,11 @@ const FORMAT_GROUPS: { label: string; formats: CampaignFormat[] }[] = [
 const ALL_FORMATS: CampaignFormat[] = FORMAT_GROUPS.flatMap((g) => g.formats);
 
 const STATUS_COLORS: Record<CampaignStatus, string> = {
-  Borrador: 'bg-slate-100 text-slate-600',
-  'En producción': 'bg-blue-100 text-blue-700',
-  'En revisión': 'bg-amber-100 text-amber-700',
-  Aprobada: 'bg-emerald-100 text-emerald-700',
-  Archivada: 'bg-slate-100 text-slate-400',
+  Borrador: 'bg-slate-100 text-slate-600 dark:bg-slate-500/20 dark:text-slate-300',
+  'En producción': 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300',
+  'En revisión': 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
+  Aprobada: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
+  Archivada: 'bg-slate-100 text-slate-400 dark:bg-slate-500/15 dark:text-slate-400',
 };
 
 const StatusBadge = ({ status }: { status: CampaignStatus }) => (
@@ -98,7 +98,7 @@ const CampaignList = () => {
 
       <Card>
         {/* Filters */}
-        <CardHeader className="flex flex-col sm:flex-row gap-4 border-b border-border bg-slate-50/50">
+        <CardHeader className="flex flex-col sm:flex-row gap-4 border-b border-border bg-slate-50/50 dark:bg-transparent">
           <div className="relative flex-1">
             <Search
               className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"

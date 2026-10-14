@@ -74,7 +74,7 @@ function useToasts(): ToastItem[] {
 const COLORS: Record<ToastType, { bar: string; bg: string; icon: string }> = {
   success: { bar: 'bg-emerald-500', bg: 'bg-emerald-50 border-emerald-200', icon: 'text-emerald-600' },
   info: { bar: 'bg-blue-500', bg: 'bg-blue-50 border-blue-200', icon: 'text-blue-600' },
-  phase: { bar: 'bg-accent', bg: 'bg-white border-border shadow-lg', icon: 'text-accent' },
+  phase: { bar: 'bg-accent', bg: 'bg-surface border-border shadow-lg', icon: 'text-accent' },
   error: { bar: 'bg-red-500', bg: 'bg-red-50 border-red-200', icon: 'text-red-600' },
 };
 
