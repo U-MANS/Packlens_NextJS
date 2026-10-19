@@ -38,19 +38,24 @@ interface AppUser {
 }
 
 const DEPT_COLORS: Record<Dept, string> = {
-  Marketing: 'bg-indigo-50 text-indigo-700 border-indigo-200',
-  Diseño: 'bg-purple-50 text-purple-700 border-purple-200',
-  'I+D': 'bg-orange-50 text-orange-700 border-orange-200',
-  Comercial: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  Admin: 'bg-slate-100 text-slate-600 border-slate-200',
+  Marketing:
+    'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-500/15 dark:text-indigo-300 dark:border-indigo-500/35',
+  Diseño:
+    'bg-purple-50 text-purple-700 border-purple-200 dark:bg-violet-500/15 dark:text-violet-300 dark:border-violet-500/35',
+  'I+D':
+    'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-500/15 dark:text-orange-300 dark:border-orange-500/35',
+  Comercial:
+    'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/35',
+  Admin:
+    'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-500/20 dark:text-slate-300 dark:border-slate-500/30',
 };
 
 const AVATAR_COLORS: Record<Dept, string> = {
-  Marketing: 'bg-indigo-100 text-indigo-700',
-  Diseño: 'bg-purple-100 text-purple-700',
-  'I+D': 'bg-orange-100 text-orange-700',
-  Comercial: 'bg-emerald-100 text-emerald-700',
-  Admin: 'bg-slate-200 text-slate-700',
+  Marketing: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300',
+  Diseño: 'bg-purple-100 text-purple-700 dark:bg-violet-500/20 dark:text-violet-300',
+  'I+D': 'bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300',
+  Comercial: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300',
+  Admin: 'bg-slate-200 text-slate-700 dark:bg-slate-500/25 dark:text-slate-200',
 };
 
 const ALL_DEPTS: Dept[] = ['Marketing', 'Diseño', 'I+D', 'Comercial', 'Admin'];

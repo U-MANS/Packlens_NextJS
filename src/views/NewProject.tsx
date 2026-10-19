@@ -1587,7 +1587,7 @@ const NewProject = () => {
               </Card>
             )}
 
-            <Card className="bg-gradient-to-br from-accent/5 to-white">
+            <Card className="bg-gradient-to-br from-accent/5 to-surface dark:from-accent/10 dark:to-surface">
               <CardHeader className="border-b-0 pb-2">
                 <CardTitle className="text-base">Vista previa</CardTitle>
                 <p className="text-xs text-slate-500 mt-1">

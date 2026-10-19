@@ -79,12 +79,12 @@ const TripletPanel: React.FC<TripletPanelProps> = ({
   isDragOver,
 }) => (
   <div
-    className={`relative bg-slate-100 ${divider ? 'lg:border-r border-border' : ''} ${
+    className={`relative bg-secondary ${divider ? 'lg:border-r border-border' : ''} ${
       isDragOver ? 'ring-2 ring-inset ring-accent/40 bg-accent/5' : ''
     }`}
   >
     {/* Header */}
-    <div className="absolute top-0 left-0 right-0 z-10 px-3 py-2 bg-gradient-to-b from-white/90 to-white/0 pointer-events-none">
+    <div className="absolute top-0 left-0 right-0 z-10 px-3 py-2 bg-gradient-to-b from-secondary via-secondary/80 to-transparent pointer-events-none">
       <div className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
         Panel {index} de 3
       </div>
@@ -353,7 +353,7 @@ export const TabComparador = ({ projectId }: { projectId: string }) => {
         className={`absolute inset-3 mt-16 flex flex-col items-center justify-center text-center px-6 rounded-xl border-2 border-dashed cursor-pointer transition-colors ${
           isDragOver
             ? 'border-accent bg-accent/10'
-            : 'border-slate-200 bg-white hover:border-accent hover:bg-accent/5'
+            : 'border-border bg-surface/60 hover:border-accent hover:bg-accent/5'
         }`}
       >
         <Upload size={26} className="text-slate-400 mb-2" />
@@ -534,12 +534,12 @@ export const TabComparador = ({ projectId }: { projectId: string }) => {
             }
             emptyState={
               isComputing ? (
-                <div className="absolute inset-3 mt-16 flex flex-col items-center justify-center text-center px-6 rounded-xl border-2 border-dashed border-accent/40 bg-white text-slate-500">
+                <div className="absolute inset-3 mt-16 flex flex-col items-center justify-center text-center px-6 rounded-xl border-2 border-dashed border-accent/40 bg-surface/60 text-slate-500">
                   <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin mb-2" />
                   <p className="text-sm">Procesando diff…</p>
                 </div>
               ) : (
-                <div className="absolute inset-3 mt-16 flex flex-col items-center justify-center text-center px-6 rounded-xl border-2 border-dashed border-slate-200 bg-white text-slate-400">
+                <div className="absolute inset-3 mt-16 flex flex-col items-center justify-center text-center px-6 rounded-xl border-2 border-dashed border-border bg-surface/60 text-slate-400">
                   <GitCompare size={28} className="opacity-50 mb-2" />
                   <p className="text-sm">Pulsa "Comparar" cuando hayas cargado ambas imágenes.</p>
                 </div>
@@ -549,7 +549,7 @@ export const TabComparador = ({ projectId }: { projectId: string }) => {
 
           {/* Zoom hint */}
           {(p1 || p2 || diffResult) && (
-            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 text-[11px] text-slate-700 bg-white/85 backdrop-blur-sm border border-border rounded-full px-3 py-1.5 pointer-events-none shadow-sm">
+            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 text-[11px] text-slate-700 bg-surface/90 backdrop-blur-sm border border-border rounded-full px-3 py-1.5 pointer-events-none shadow-sm">
               <Move size={12} className="text-slate-500" />
               <span>Arrastra para mover · Rueda para zoom · {Math.round(scale * 100)}%</span>
             </div>
@@ -557,7 +557,7 @@ export const TabComparador = ({ projectId }: { projectId: string }) => {
         </div>
 
         {/* Action bar */}
-        <CardContent className="border-t border-border flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between bg-white">
+        <CardContent className="border-t border-border flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between bg-surface">
           <div className="flex items-center gap-3 flex-wrap">
             <label
               htmlFor="diff-threshold"

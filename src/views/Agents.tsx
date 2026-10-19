@@ -13,8 +13,10 @@ import { useAuthStore } from '../store/useAuthStore';
 import { Navigate } from 'react-router-dom';
 
 const ROLE_COLORS: Record<AgentRole, string> = {
-  Marketing: 'bg-indigo-50 text-indigo-700 border-indigo-200',
-  'I+D': 'bg-orange-50 text-orange-700 border-orange-200',
+  Marketing:
+    'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-500/15 dark:text-indigo-300 dark:border-indigo-500/35',
+  'I+D':
+    'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-500/15 dark:text-orange-300 dark:border-orange-500/35',
 };
 
 const EMPTY_FORM = {

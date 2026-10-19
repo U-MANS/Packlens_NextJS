@@ -529,7 +529,7 @@ const DesignPhaseView: React.FC<DesignPhaseProps> = ({ projectId, onPreviewImage
             </div>
           )}
           {project.briefing?.notes && (
-            <div className="text-sm text-slate-700 leading-relaxed bg-amber-50/60 border-l-2 border-amber-300 px-3 py-2 rounded-r-md whitespace-pre-line">
+            <div className="text-sm text-slate-700 dark:text-slate-200 leading-relaxed bg-amber-50/60 dark:bg-amber-500/10 border-l-2 border-amber-300 dark:border-amber-500/40 px-3 py-2 rounded-r-md whitespace-pre-line">
               {project.briefing.notes}
             </div>
           )}

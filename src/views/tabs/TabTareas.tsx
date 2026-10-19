@@ -18,18 +18,19 @@ const KanbanColumn: React.FC<{
   title: string;
   count: number;
   accentClass: string;
+  titleClass: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
-}> = ({ title, count, accentClass, children, footer }) => (
-  <section className="flex flex-col min-h-[420px] min-w-[260px] flex-1 rounded-xl border border-border bg-slate-50/80 overflow-hidden">
+}> = ({ title, count, accentClass, titleClass, children, footer }) => (
+  <section className="flex flex-col min-h-[420px] min-w-[260px] flex-1 rounded-xl border border-border bg-secondary overflow-hidden">
     <header className={`px-4 py-3 border-b border-border flex items-center justify-between ${accentClass}`}>
-      <h3 className="text-sm font-semibold text-primary">{title}</h3>
-      <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-white/80 border border-border text-slate-600">
+      <h3 className={`text-sm font-semibold ${titleClass}`}>{title}</h3>
+      <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-surface border border-border text-slate-600 dark:text-slate-300">
         {count}
       </span>
     </header>
     <div className="flex-1 overflow-y-auto p-3 space-y-2.5">{children}</div>
-    {footer && <div className="p-3 border-t border-border bg-white/70">{footer}</div>}
+    {footer && <div className="p-3 border-t border-border bg-surface/80">{footer}</div>}
   </section>
 );
 
@@ -41,8 +42,10 @@ const TaskCard: React.FC<{
   const done = task.status === 'Completada';
   return (
     <article
-      className={`rounded-lg border bg-white p-3 shadow-sm transition-colors ${
-        done ? 'border-emerald-200 bg-emerald-50/40' : 'border-border hover:border-slate-300'
+      className={`rounded-lg border bg-surface p-3 shadow-sm transition-colors ${
+        done
+          ? 'border-emerald-200/80 bg-emerald-500/10 dark:border-emerald-500/30'
+          : 'border-border hover:border-slate-300 dark:hover:border-slate-600'
       }`}
     >
       <div className="flex items-start gap-2.5">
@@ -86,8 +89,10 @@ const CommentCard: React.FC<{
   busy?: boolean;
 }> = ({ comment, onResolve, busy }) => (
   <article
-    className={`rounded-lg border bg-white p-3 shadow-sm ${
-      comment.resolved ? 'border-slate-200 opacity-80' : 'border-border hover:border-slate-300'
+    className={`rounded-lg border bg-surface p-3 shadow-sm ${
+      comment.resolved
+        ? 'border-border opacity-80'
+        : 'border-border hover:border-slate-300 dark:hover:border-slate-600'
     }`}
   >
     <div className="flex items-start gap-2.5">
@@ -184,7 +189,7 @@ const QuickAdd: React.FC<{
             setError(null);
           }
         }}
-        className="w-full px-2.5 py-2 text-sm border border-border rounded-md bg-white focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 resize-none disabled:opacity-60"
+        className="w-full px-2.5 py-2 text-sm border border-border rounded-md bg-surface text-primary focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 resize-none disabled:opacity-60"
       />
       {error && <p className="text-xs text-red-600">{error}</p>}
       <div className="flex items-center justify-end gap-2">
@@ -276,7 +281,8 @@ export const TabTareas = ({ projectId }: { projectId: string }) => {
         <KanbanColumn
           title="Tareas pendientes"
           count={pendingTasks.length}
-          accentClass="bg-amber-50/80"
+          accentClass="bg-amber-50 dark:bg-amber-500/15"
+          titleClass="text-amber-900 dark:text-amber-200"
           footer={
             <QuickAdd
               placeholder="Describe la tarea…"
@@ -286,7 +292,7 @@ export const TabTareas = ({ projectId }: { projectId: string }) => {
           }
         >
           {pendingTasks.length === 0 ? (
-            <p className="text-xs text-slate-400 text-center py-8 px-2">
+            <p className="text-xs text-slate-500 dark:text-slate-400 text-center py-8 px-2">
               No hay tareas pendientes.
             </p>
           ) : (
@@ -304,10 +310,11 @@ export const TabTareas = ({ projectId }: { projectId: string }) => {
         <KanbanColumn
           title="Tareas completadas"
           count={doneTasks.length}
-          accentClass="bg-emerald-50/80"
+          accentClass="bg-emerald-50 dark:bg-emerald-500/15"
+          titleClass="text-emerald-900 dark:text-emerald-200"
         >
           {doneTasks.length === 0 ? (
-            <p className="text-xs text-slate-400 text-center py-8 px-2">
+            <p className="text-xs text-slate-500 dark:text-slate-400 text-center py-8 px-2">
               Aún no hay tareas completadas.
             </p>
           ) : (
@@ -325,7 +332,8 @@ export const TabTareas = ({ projectId }: { projectId: string }) => {
         <KanbanColumn
           title="Comentarios abiertos"
           count={openComments.length}
-          accentClass="bg-sky-50/80"
+          accentClass="bg-sky-50 dark:bg-sky-500/15"
+          titleClass="text-sky-900 dark:text-sky-200"
           footer={
             <QuickAdd
               placeholder="Escribe un comentario sencillo…"
@@ -335,7 +343,7 @@ export const TabTareas = ({ projectId }: { projectId: string }) => {
           }
         >
           {openComments.length === 0 ? (
-            <p className="text-xs text-slate-400 text-center py-8 px-2">
+            <p className="text-xs text-slate-500 dark:text-slate-400 text-center py-8 px-2">
               Sin comentarios abiertos.
             </p>
           ) : (
@@ -353,12 +361,13 @@ export const TabTareas = ({ projectId }: { projectId: string }) => {
         <KanbanColumn
           title="Comentarios cerrados"
           count={closedComments.length}
-          accentClass="bg-slate-100/90"
+          accentClass="bg-slate-100 dark:bg-slate-500/15"
+          titleClass="text-slate-700 dark:text-slate-200"
         >
           {closedComments.length === 0 ? (
             <div className="text-center py-8 px-2 space-y-2">
-              <Circle size={18} className="mx-auto text-slate-300" />
-              <p className="text-xs text-slate-400">
+              <Circle size={18} className="mx-auto text-slate-400" />
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 Los comentarios resueltos aparecerán aquí.
               </p>
             </div>

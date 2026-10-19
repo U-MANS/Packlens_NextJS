@@ -263,9 +263,9 @@ export default function Moodboard() {
               </div>
 
               {useProjectThumbs && (
-                <div className="rounded-lg border border-border bg-slate-50/80 p-3 space-y-3">
+                <div className="rounded-lg border border-border bg-secondary p-3 space-y-3">
                   <div className="flex items-center justify-between gap-3 flex-wrap">
-                    <p className="text-xs text-slate-600">
+                    <p className="text-xs text-slate-600 dark:text-slate-300">
                       Elige thumbnails de proyectos existentes
                       {pickingThumb && (
                         <span className="ml-2 inline-flex items-center gap-1 text-accent">
@@ -279,7 +279,7 @@ export default function Moodboard() {
                       onChange={(e) => setProjectSearch(e.target.value)}
                       placeholder="Buscar por nombre o SKU…"
                       disabled={loading}
-                      className="w-full sm:w-56 px-2.5 py-1.5 text-xs border border-border rounded-md bg-white focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
+                      className="w-full sm:w-56 px-2.5 py-1.5 text-xs border border-border rounded-md bg-surface text-primary focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
                     />
                   </div>
                   {projectsWithThumb.length === 0 ? (
