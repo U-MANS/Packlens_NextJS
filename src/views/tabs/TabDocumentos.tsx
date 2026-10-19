@@ -335,32 +335,30 @@ const PhaseGroup: React.FC<{
   return (
     <div className="bg-surface border border-border rounded-xl shadow-sm overflow-hidden">
       {/* Header */}
-      <button
-        type="button"
-        onClick={() => setExpanded((v) => !v)}
-        className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-slate-50 transition-colors"
-      >
-        <div className="flex items-center gap-3">
+      <div className="w-full flex items-center justify-between gap-2 px-5 py-3.5">
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="flex items-center gap-3 min-w-0 flex-1 text-left rounded-md -ml-1.5 pl-1.5 pr-2 py-1 hover:bg-slate-50 transition-colors"
+        >
           <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${style.dot}`} />
-          <span className="text-sm font-semibold text-primary">{phase}</span>
+          <span className="text-sm font-semibold text-primary truncate">{phase}</span>
           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${style.badge}`}>
             {style.icon} {entries.length} archivo{entries.length !== 1 ? 's' : ''}
           </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); handleDownloadAll(); }}
-            className="hidden sm:inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-accent px-2.5 py-1.5 rounded-md border border-border hover:border-accent/40 hover:bg-accent/5 transition-colors"
-          >
-            <Download size={12} /> Descargar todos
-          </button>
           <ChevronRight
             size={16}
-            className={`text-slate-400 transition-transform ${expanded ? 'rotate-90' : ''}`}
+            className={`text-slate-400 shrink-0 ml-auto transition-transform ${expanded ? 'rotate-90' : ''}`}
           />
-        </div>
-      </button>
+        </button>
+        <button
+          type="button"
+          onClick={handleDownloadAll}
+          className="hidden sm:inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-accent px-2.5 py-1.5 rounded-md border border-border hover:border-accent/40 hover:bg-accent/5 transition-colors shrink-0"
+        >
+          <Download size={12} /> Descargar todos
+        </button>
+      </div>
 
       {/* File grid */}
       {expanded && (
