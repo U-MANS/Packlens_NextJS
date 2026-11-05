@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { requireUser, userToApi } from '@/lib/server/auth';
 import { jsonError, jsonOk } from '@/lib/server/http';
-import { canManageUsers } from '@/lib/server/permissions';
+import { canManageUsers, isValidUserRole, USER_ROLES } from '@/lib/server/permissions';
 import { getAdminClient } from '@/lib/supabase/admin';
 import { adminCreateUser } from '@/lib/supabase/admin-users';
 
@@ -40,6 +40,13 @@ export async function POST(request: NextRequest) {
     status?: string;
     initials?: string;
   };
+
+  if (!body.name?.trim() || !body.email?.trim() || !body.password) {
+    return jsonError('Nombre, email y contraseña son obligatorios', 400);
+  }
+  if (!isValidUserRole(body.role)) {
+    return jsonError(`Rol no válido. Usa: ${USER_ROLES.join(', ')}`, 400);
+  }
 
   const admin = getAdminClient();
   const { data: existing } = await admin.from('users').select('id').eq('email', body.email).maybeSingle();

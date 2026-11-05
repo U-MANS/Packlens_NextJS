@@ -224,7 +224,7 @@ const inputClass =
 const NewProject = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { addProject, projects } = useAppStore();
+  const { addProject, projects, refreshProjects } = useAppStore();
   const [teamUsers, setTeamUsers] = useState<ApiUser[]>([]);
   const [agents, setAgents] = useState<ApiAgent[]>([]);
   const [rawBriefingFiles, setRawBriefingFiles] = useState<File[]>([]);
@@ -546,6 +546,7 @@ const NewProject = () => {
           form.substitutionType === 'Temporal' ? form.temporalEndDate : undefined,
         );
         projectId = created.id;
+        await refreshProjects();
       } else {
         projectId = await addProject(payload, rawBriefingFiles);
       }
@@ -705,17 +706,17 @@ const NewProject = () => {
                 {creationMode === 'version' && (
                   <div className="space-y-3 pt-1 border-t border-border">
                     {sourceProject ? (
-                      <div className="flex items-start justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50/80 px-4 py-3">
+                      <div className="flex items-start justify-between gap-3 rounded-lg border border-amber-200 dark:border-amber-500/35 bg-amber-50/80 dark:bg-amber-500/10 px-4 py-3">
                         <div className="min-w-0">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 mb-1">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300 mb-1">
                             Producto base seleccionado
                           </p>
                           <p className="font-medium text-primary truncate">{sourceProject.name}</p>
-                          <p className="text-xs text-slate-500 font-mono mt-0.5">
+                          <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">
                             {sourceProject.sku} · v{sourceProject.version ?? 1}
                             {sourceProject.sapCode ? ` · SAP ${sourceProject.sapCode}` : ''}
                           </p>
-                          <p className="text-xs text-amber-700 mt-1">
+                          <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
                             Nueva versión: <span className="font-mono font-semibold">{form.sku}</span>
                           </p>
                         </div>
@@ -726,7 +727,7 @@ const NewProject = () => {
                             setSkuTouched(false);
                             navigate('/projects/new', { replace: true });
                           }}
-                          className="text-xs font-medium text-amber-700 hover:text-amber-900 shrink-0"
+                          className="text-xs font-medium text-amber-700 dark:text-amber-300 hover:text-amber-900 dark:hover:text-amber-200 shrink-0"
                         >
                           Cambiar
                         </button>
@@ -1580,7 +1581,8 @@ const NewProject = () => {
                   {/* Permanent confirmation note */}
                   {form.substitutionType === 'Permanente' && (
                     <p className="text-xs text-amber-600 leading-relaxed">
-                      Al aprobarse, la versión anterior pasará a <strong>Obsoleta</strong> de forma permanente.
+                      La versión anterior queda en <strong>En proceso de cambio</strong> y, al
+                      aprobarse esta, pasará a <strong>Sustituido</strong>.
                     </p>
                   )}
                 </CardContent>

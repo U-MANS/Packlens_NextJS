@@ -59,11 +59,28 @@ export async function POST(request: NextRequest, context: Ctx) {
     .single();
 
   if (error || !created) return jsonError(error?.message || 'Error creando versión', 500);
+
+  // La versión anterior queda a la espera de ser sustituida.
+  await admin
+    .from('projects')
+    .update({
+      lifecycle_status: 'En proceso de cambio',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', source.id);
+
   await addActivity(
     created.id,
     user.id,
     'NEW_VERSION',
     `Nueva versión v${nextVersion} creada desde v${source.version}`,
   );
+  await addActivity(
+    source.id,
+    user.id,
+    'PHASE_CHANGED',
+    `Marcado como «En proceso de cambio» por la nueva versión v${nextVersion} (${newSku})`,
+  );
+
   return jsonOk(await reloadProject(created.id), { status: 201 });
 }

@@ -1,6 +1,15 @@
 import { getAdminClient } from '@/lib/supabase/admin';
 import type { DbUser } from '@/lib/server/auth';
-import { PHASE_TO_STATUS, nextPhase, prevPhase, isReviewPhase } from '@/lib/server/phase';
+import {
+  PHASE_TO_STATUS,
+  nextPhase,
+  prevPhase,
+  isReviewPhase,
+  isInParallelGate,
+  isParallelReviewPhase,
+  PARALLEL_REJECT_TARGET,
+  PARALLEL_ADVANCE_TARGET,
+} from '@/lib/server/phase';
 import { schedulePhaseEntered, schedulePhaseRejected } from '@/lib/server/phaseNotifications';
 import { projectToReadFresh } from '@/lib/server/serializers';
 
@@ -17,7 +26,54 @@ export type WorkflowOptions = {
   /** Evita re-disparar el agente (cuando el propio agente aprueba/rechaza). */
   skipAgentTrigger?: boolean;
   agentId?: string | null;
+  /**
+   * Vía concreta a aprobar/rechazar dentro del gate paralelo
+   * (Validación diseño | Aprobación Legal). Si no se indica, se usa project.phase.
+   */
+  trackPhase?: string | null;
 };
+
+async function getParallelCycleStart(projectId: string): Promise<string | null> {
+  const admin = getAdminClient();
+  const { data: desarrollo } = await admin
+    .from('design_proposals')
+    .select('created_at')
+    .eq('project_id', projectId)
+    .eq('uploaded_phase', 'Creación Desarrollo')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (desarrollo?.created_at) return desarrollo.created_at as string;
+
+  const { data: designApprove } = await admin
+    .from('phase_actions')
+    .select('created_at')
+    .eq('project_id', projectId)
+    .eq('phase', 'Aprobación Diseño')
+    .eq('type', 'approve')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return (designApprove?.created_at as string | undefined) ?? null;
+}
+
+async function hasTrackApprovalSince(
+  projectId: string,
+  track: string,
+  since: string | null,
+): Promise<boolean> {
+  const admin = getAdminClient();
+  let query = admin
+    .from('phase_actions')
+    .select('id')
+    .eq('project_id', projectId)
+    .eq('phase', track)
+    .eq('type', 'approve')
+    .limit(1);
+  if (since) query = query.gte('created_at', since);
+  const { data } = await query;
+  return (data?.length ?? 0) > 0;
+}
 
 export async function getProjectRow(id: string) {
   const admin = getAdminClient();
@@ -102,6 +158,102 @@ export async function approvePhase(
 
   const flowType = (project.flow_type as string | null) ?? null;
   const fromPhase = project.phase as string;
+
+  // ── Gate paralelo: Validación diseño + Aprobación Legal ──────────────────
+  if (isInParallelGate(fromPhase, flowType)) {
+    const track =
+      (options?.trackPhase && isParallelReviewPhase(options.trackPhase)
+        ? options.trackPhase
+        : fromPhase) as string;
+
+    if (!isParallelReviewPhase(track)) {
+      return { error: `Vía de aprobación no válida: ${track}`, status: 400 as const };
+    }
+
+    const cycleStart = await getParallelCycleStart(projectId);
+    if (await hasTrackApprovalSince(projectId, track, cycleStart)) {
+      return {
+        error: `La vía «${track}» ya está aprobada en este ciclo`,
+        status: 400 as const,
+      };
+    }
+
+    const action = await addPhaseAction(
+      projectId,
+      actor,
+      track,
+      'approve',
+      comment,
+      options?.agentId,
+    );
+
+    const otherTrack = track === 'Validación diseño' ? 'Aprobación Legal' : 'Validación diseño';
+    const otherDone = await hasTrackApprovalSince(projectId, otherTrack, cycleStart);
+
+    await addActivity(
+      projectId,
+      actor.id,
+      'REVIEW_APPROVED',
+      `Aprobó la fase ${track}` + (comment ? `: ${comment}` : ''),
+      action.id,
+    );
+
+    if (otherDone) {
+      const toPhase = PARALLEL_ADVANCE_TARGET;
+      const { error } = await admin
+        .from('projects')
+        .update({
+          phase: toPhase,
+          status: PHASE_TO_STATUS[toPhase] ?? project.status,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', projectId);
+      if (error) return { error: error.message, status: 500 as const };
+
+      await addActivity(
+        projectId,
+        actor.id,
+        'PHASE_CHANGED',
+        `Validación y Legal aprobados — fase cambiada de ${fromPhase} a ${toPhase}`,
+        action.id,
+      );
+
+      maybeScheduleAgent(projectId, toPhase, options);
+      schedulePhaseEntered({
+        project,
+        toPhase,
+        actorId: actor.id,
+        actorName: actor.name,
+      });
+    } else {
+      // Anclar en la vía pendiente para que el listado «pendientes» apunte al rol correcto.
+      const pendingPhase = otherTrack;
+      const { error } = await admin
+        .from('projects')
+        .update({
+          phase: pendingPhase,
+          status: PHASE_TO_STATUS[pendingPhase] ?? project.status,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', projectId);
+      if (error) return { error: error.message, status: 500 as const };
+
+      if (pendingPhase !== fromPhase) {
+        await addActivity(
+          projectId,
+          actor.id,
+          'PHASE_CHANGED',
+          `${track} aprobada — pendiente ${pendingPhase}`,
+          action.id,
+        );
+        // No re-notificar la vía ya avisada al entrar al gate; el listado basta.
+      }
+    }
+
+    return { data: await reloadProject(projectId) };
+  }
+
+  // ── Flujo secuencial (resto de fases) ────────────────────────────────────
   const toPhase = nextPhase(fromPhase, flowType);
   const action = await addPhaseAction(
     projectId,
@@ -121,10 +273,20 @@ export async function approvePhase(
   if (toPhase === 'Aprobado') {
     if (project.previous_version_id) {
       updates.lifecycle_status = 'Vigente';
+      const prevId = project.previous_version_id as string;
       await admin
         .from('projects')
-        .update({ lifecycle_status: 'Obsoleta' })
-        .eq('id', project.previous_version_id);
+        .update({
+          lifecycle_status: 'Sustituido',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', prevId);
+      await addActivity(
+        prevId,
+        actor.id,
+        'PHASE_CHANGED',
+        `Marcado como «Sustituido» al aprobarse la nueva versión (${project.sku})`,
+      );
     } else {
       updates.lifecycle_status = 'Pendiente SAP';
     }
@@ -174,8 +336,18 @@ export async function rejectPhase(
   }
 
   const flowType = (project.flow_type as string | null) ?? null;
-  const fromPhase = project.phase as string;
-  const toPhase = prevPhase(fromPhase, flowType);
+  const projectPhase = project.phase as string;
+  const track =
+    isInParallelGate(projectPhase, flowType) &&
+    options?.trackPhase &&
+    isParallelReviewPhase(options.trackPhase)
+      ? options.trackPhase
+      : projectPhase;
+  const fromPhase = track;
+  const toPhase = isInParallelGate(projectPhase, flowType)
+    ? PARALLEL_REJECT_TARGET
+    : prevPhase(projectPhase, flowType);
+
   const action = await addPhaseAction(
     projectId,
     actor,

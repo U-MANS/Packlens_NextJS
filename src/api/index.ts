@@ -298,6 +298,16 @@ export async function createProject(payload: ProjectCreatePayload): Promise<ApiP
   });
 }
 
+export async function createDemoProject(payload?: {
+  template?: unknown;
+  unique_sku?: boolean;
+}): Promise<{ project: ApiProject; sku: string; message: string }> {
+  return apiFetch('/projects/demo', {
+    method: 'POST',
+    body: JSON.stringify(payload ?? {}),
+  });
+}
+
 export async function updateProjectApi(
   id: string,
   patch: Record<string, unknown>,
@@ -354,17 +364,25 @@ export async function deleteProjectThumbnail(projectId: string): Promise<ApiProj
 
 // ─── Workflow ────────────────────────────────────────────────────────────────
 
-export async function approvePhase(projectId: string, comment?: string): Promise<ApiProject> {
+export async function approvePhase(
+  projectId: string,
+  comment?: string,
+  phase?: string,
+): Promise<ApiProject> {
   return apiFetch<ApiProject>(`/projects/${projectId}/phase/approve`, {
     method: 'POST',
-    body: JSON.stringify({ comment: comment ?? null }),
+    body: JSON.stringify({ comment: comment ?? null, phase: phase ?? null }),
   });
 }
 
-export async function rejectPhase(projectId: string, comment: string): Promise<ApiProject> {
+export async function rejectPhase(
+  projectId: string,
+  comment: string,
+  phase?: string,
+): Promise<ApiProject> {
   return apiFetch<ApiProject>(`/projects/${projectId}/phase/reject`, {
     method: 'POST',
-    body: JSON.stringify({ comment }),
+    body: JSON.stringify({ comment, phase: phase ?? null }),
   });
 }
 

@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Eye,
   Filter,
+  FlaskConical,
   GitBranchPlus,
   Image as ImageIcon,
   MoreHorizontal,
@@ -14,10 +15,14 @@ import {
   X,
 } from 'lucide-react';
 
+import { createDemoProject } from '../api';
 import { Card, CardHeader } from '../components/ui/Card';
 import { StatusBadge } from '../components/ui/Badge';
+import { toast } from '../components/ui/Toast';
 import { useAppStore } from '../store/useAppStore';
+import { useAuthStore } from '../store/useAuthStore';
 import type { LifecycleStatus, Project } from '../types';
+import { getErrorMessage } from '../utils/errors';
 import { isPhaseOwnedByRole, phasesOwnedByRole } from '../utils/phase';
 import { filterProjectsForRole, isComercialView } from '../utils/roles';
 import { formatDate } from '../utils/dates';
@@ -35,6 +40,10 @@ const LIFECYCLE_STYLES: Record<LifecycleStatus, string> = {
     'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/15 dark:text-blue-300 dark:border-blue-500/35',
   Obsoleta:
     'bg-red-50 text-red-600 border-red-200 dark:bg-red-500/15 dark:text-red-300 dark:border-red-500/35',
+  'En proceso de cambio':
+    'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-500/15 dark:text-orange-300 dark:border-orange-500/35',
+  Sustituido:
+    'bg-slate-200 text-slate-600 border-slate-300 dark:bg-slate-500/25 dark:text-slate-300 dark:border-slate-500/40',
 };
 
 const LifecycleBadge = ({ status }: { status: LifecycleStatus | undefined }) => {
@@ -317,7 +326,9 @@ const ProjectRow: React.FC<ProjectRowProps> = ({ project, openMenuId, setOpenMen
 const ProjectList = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { projects, activeRole } = useAppStore();
+  const { projects, activeRole, bootstrap, refreshProjects } = useAppStore();
+  const user = useAuthStore((s) => s.user);
+  const isAdmin = user?.role === 'Admin';
   const isComercial = isComercialView(activeRole);
   const awaitingMe = searchParams.get('awaitingMe') === '1';
   const rejectedFilter = searchParams.get('rejected') === '1';
@@ -329,6 +340,27 @@ const ProjectList = () => {
     isComercial ? 'Vigente' : 'Todos',
   );
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [creatingDemo, setCreatingDemo] = useState(false);
+
+  // Al entrar en /projects, sincroniza con el servidor (altas, versiones, ciclos…).
+  useEffect(() => {
+    void refreshProjects();
+  }, [refreshProjects]);
+
+  const handleCreateDemo = async () => {
+    if (creatingDemo) return;
+    setCreatingDemo(true);
+    try {
+      const result = await createDemoProject();
+      await bootstrap();
+      toast.success(result.message || 'Proyecto demo creado');
+      navigate(`/projects/${result.project.id}`);
+    } catch (e) {
+      toast.error(getErrorMessage(e, 'No se pudo crear el proyecto demo'));
+    } finally {
+      setCreatingDemo(false);
+    }
+  };
 
   // Close menu when clicking anywhere outside a row
   useEffect(() => {
@@ -416,13 +448,27 @@ const ProjectList = () => {
           </p>
         </div>
         {!isComercial && (
-          <button
-            onClick={() => navigate('/projects/new')}
-            className="flex items-center gap-2 bg-accent hover:bg-accent-hover text-white px-4 py-2 rounded-md font-medium transition-colors"
-          >
-            <Plus size={18} />
-            Nuevo Proyecto
-          </button>
+          <div className="flex items-center gap-2">
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => void handleCreateDemo()}
+                disabled={creatingDemo}
+                title="Crea un proyecto de ejemplo con fases, propuestas, tareas y comentarios"
+                className="flex items-center gap-2 border border-border bg-surface hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-md font-medium transition-colors disabled:opacity-60"
+              >
+                <FlaskConical size={16} />
+                {creatingDemo ? 'Creando demo…' : 'Proyecto demo'}
+              </button>
+            )}
+            <button
+              onClick={() => navigate('/projects/new')}
+              className="flex items-center gap-2 bg-accent hover:bg-accent-hover text-white px-4 py-2 rounded-md font-medium transition-colors"
+            >
+              <Plus size={18} />
+              Nuevo Proyecto
+            </button>
+          </div>
         )}
       </div>
 
@@ -493,7 +539,17 @@ const ProjectList = () => {
                 className="border border-border rounded-md px-3 py-2 text-sm bg-white focus:outline-none focus:border-accent"
               >
                 <option value="Todos">Todos los ciclos</option>
-                {(['Borrador', 'Pendiente SAP', 'Vigente', 'Temporal', 'Obsoleta'] as LifecycleStatus[]).map((s) => (
+                {(
+                  [
+                    'Borrador',
+                    'Pendiente SAP',
+                    'Vigente',
+                    'Temporal',
+                    'En proceso de cambio',
+                    'Sustituido',
+                    'Obsoleta',
+                  ] as LifecycleStatus[]
+                ).map((s) => (
                   <option key={s} value={s}>{s}</option>
                 ))}
               </select>

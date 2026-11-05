@@ -31,8 +31,24 @@ import {
 } from '../../components/modals/PhaseActionModals';
 import { useAppStore } from '../../store/useAppStore';
 import { availableMarkets } from '../../data/mockSeed';
-import { canApprovePhase, canManageArteFinal, canManageBriefing, getDevelopmentRejectionChain, getPendingIncomingRejection, getPhaseOrder, isAudiovisualFlow, isReviewPhase, phaseDisplayName } from '../../utils/phase';
+import {
+  canApprovePhase,
+  canManageArteFinal,
+  canManageBriefing,
+  getDevelopmentRejectionChain,
+  getParallelCycleStart,
+  getPendingIncomingRejection,
+  getPhaseOrder,
+  hasParallelTrackApproval,
+  isAudiovisualFlow,
+  isInParallelGate,
+  isParallelReviewPhase,
+  isReviewPhase,
+  phaseDisplayName,
+  phaseIndex,
+} from '../../utils/phase';
 import { formatFileSize, downloadAttachment, isZipAttachment, isZipFile } from '../../utils/files';
+import { canAccessWorkflowFile } from '../../utils/fileAccess';
 import { renderPdfPage } from '../../utils/pdfRenderer';
 
 /** Abre un dataUrl o URL HTTP en una nueva pestaña. */
@@ -79,49 +95,263 @@ interface PipelineProps {
   selectedPhase: ProjectPhase;
   onSelect: (phase: ProjectPhase) => void;
   flowType?: string | null;
+  /** Vías del gate paralelo ya aprobadas en el ciclo actual. */
+  parallelApproved?: Partial<Record<ProjectPhase, boolean>>;
 }
 
-const Pipeline: React.FC<PipelineProps> = ({ currentPhase, selectedPhase, onSelect, flowType }) => {
+type PipelineSlot =
+  | { kind: 'single'; phase: ProjectPhase }
+  | { kind: 'parallel'; phases: ProjectPhase[] };
+
+function buildPipelineSlots(flowType?: string | null): PipelineSlot[] {
   const order = getPhaseOrder(flowType);
-  const currentIdx = Math.max(0, order.indexOf(currentPhase));
+  if (isAudiovisualFlow(flowType)) {
+    return order.map((phase) => ({ kind: 'single' as const, phase }));
+  }
+  const slots: PipelineSlot[] = [];
+  let parallelBuffered = false;
+  for (const phase of order) {
+    if (isParallelReviewPhase(phase)) {
+      if (!parallelBuffered) {
+        slots.push({
+          kind: 'parallel',
+          phases: ['Validación diseño', 'Aprobación Legal'],
+        });
+        parallelBuffered = true;
+      }
+      continue;
+    }
+    slots.push({ kind: 'single', phase });
+  }
+  return slots;
+}
+
+function pipelineStepVisual(opts: {
+  isCompleted: boolean;
+  isCurrent: boolean;
+  isApproved: boolean;
+  isSelected: boolean;
+  clickable: boolean;
+}): { circleClass: string; labelClass: string; icon: 'check' | 'clock' | 'circle' } {
+  const { isCompleted, isCurrent, isApproved, isSelected, clickable } = opts;
+  const baseCircle =
+    'w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all';
+  let circleClass: string;
+  if (isApproved) {
+    circleClass = `${baseCircle} bg-emerald-500 border-emerald-500 text-white`;
+  } else if (isCompleted) {
+    circleClass = `${baseCircle} bg-accent border-accent text-white`;
+  } else if (isCurrent) {
+    circleClass = `${baseCircle} bg-white border-accent text-accent`;
+  } else {
+    circleClass = `${baseCircle} bg-white border-slate-200 text-slate-300`;
+  }
+  if (isSelected && clickable) {
+    circleClass += isApproved
+      ? ' ring-4 ring-emerald-500/25 shadow-sm scale-105'
+      : ' ring-4 ring-accent/20 shadow-sm scale-105';
+  }
+
+  const labelClass = `text-xs font-medium text-center max-w-[88px] ${
+    isSelected
+      ? isApproved
+        ? 'text-emerald-700 font-semibold'
+        : 'text-accent font-semibold'
+      : isApproved
+        ? 'text-emerald-700 font-semibold'
+        : isCurrent
+          ? 'text-accent'
+          : isCompleted
+            ? 'text-slate-700'
+            : 'text-slate-400'
+  }`;
+
+  const icon: 'check' | 'clock' | 'circle' = isCompleted || isApproved
+    ? 'check'
+    : isCurrent
+      ? 'clock'
+      : 'circle';
+
+  return { circleClass, labelClass, icon };
+}
+
+const Pipeline: React.FC<PipelineProps> = ({
+  currentPhase,
+  selectedPhase,
+  onSelect,
+  flowType,
+  parallelApproved,
+}) => {
+  const slots = buildPipelineSlots(flowType);
+  const inParallel = isInParallelGate(currentPhase, flowType);
+  const validationIdx = phaseIndex('Validación diseño', flowType);
+  const legalIdx = phaseIndex('Aprobación Legal', flowType);
+  const rawCurrentIdx = Math.max(0, getPhaseOrder(flowType).indexOf(currentPhase));
+  const pastParallelGate =
+    !inParallel && rawCurrentIdx > Math.max(validationIdx, legalIdx);
+
+  const currentSlotIdx = (() => {
+    if (inParallel) {
+      return slots.findIndex((s) => s.kind === 'parallel');
+    }
+    return Math.max(
+      0,
+      slots.findIndex(
+        (s) => s.kind === 'single' && s.phase === currentPhase,
+      ),
+    );
+  })();
+
   const isProjectApproved = currentPhase === 'Aprobado';
-  const denom = Math.max(1, order.length - 1);
+  const denom = Math.max(1, slots.length - 1);
+  const hasParallelSlot = slots.some((s) => s.kind === 'parallel');
+
+  const renderStepIcon = (icon: 'check' | 'clock' | 'circle') =>
+    icon === 'check' ? (
+      <CheckCircle2 size={20} />
+    ) : icon === 'clock' ? (
+      <Clock size={20} />
+    ) : (
+      <Circle size={20} />
+    );
 
   return (
-    <div className="flex items-start justify-between relative mt-2">
-      <div className="absolute left-0 top-5 w-full h-1 bg-slate-100 z-0" />
+    <div
+      className={`flex justify-between relative mt-2 ${
+        hasParallelSlot ? 'items-center min-h-[9.5rem]' : 'items-start'
+      }`}
+    >
+      {/* Con gate paralelo la línea pasa por el eje central (entre Validación y Legal). */}
       <div
-        className={`absolute left-0 top-5 h-1 z-0 transition-all duration-500 ${
-          isProjectApproved ? 'bg-emerald-500' : 'bg-accent'
+        className={`absolute left-0 w-full h-1 bg-slate-100 z-0 ${
+          hasParallelSlot ? 'top-1/2 -translate-y-1/2' : 'top-5'
         }`}
-        style={{ width: `${(currentIdx / denom) * 100}%` }}
+      />
+      <div
+        className={`absolute left-0 h-1 z-0 transition-all duration-500 ${
+          isProjectApproved ? 'bg-emerald-500' : 'bg-accent'
+        } ${hasParallelSlot ? 'top-1/2 -translate-y-1/2' : 'top-5'}`}
+        style={{ width: `${(currentSlotIdx / denom) * 100}%` }}
       />
 
-      {order.map((phase, index) => {
-        const isCompleted = index < currentIdx;
-        const isCurrent = index === currentIdx;
-        const isApproved = isCurrent && phase === 'Aprobado';
-        const isFuture = index > currentIdx;
-        const isSelected = phase === selectedPhase;
+      {slots.map((slot, slotIndex) => {
+        const isFuture = slotIndex > currentSlotIdx;
         const clickable = !isFuture;
-        const label = phaseDisplayName(phase, flowType);
 
-        const baseCircle =
-          'w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all';
-        let circleClass: string;
-        if (isApproved) {
-          circleClass = `${baseCircle} bg-emerald-500 border-emerald-500 text-white`;
-        } else if (isCompleted) {
-          circleClass = `${baseCircle} bg-accent border-accent text-white`;
-        } else if (isCurrent) {
-          circleClass = `${baseCircle} bg-white border-accent text-accent`;
-        } else {
-          circleClass = `${baseCircle} bg-white border-slate-200 text-slate-300`;
+        if (slot.kind === 'parallel') {
+          const [topPhase, bottomPhase] = slot.phases;
+          const topDone =
+            Boolean(parallelApproved?.[topPhase]) || pastParallelGate;
+          const bottomDone =
+            Boolean(parallelApproved?.[bottomPhase]) || pastParallelGate;
+          const topVisual = pipelineStepVisual({
+            isCompleted: topDone,
+            isCurrent: inParallel && !topDone,
+            isApproved: false,
+            isSelected: selectedPhase === topPhase,
+            clickable,
+          });
+          const bottomVisual = pipelineStepVisual({
+            isCompleted: bottomDone,
+            isCurrent: inParallel && !bottomDone,
+            isApproved: false,
+            isSelected: selectedPhase === bottomPhase,
+            clickable,
+          });
+
+          return (
+            <div
+              key="parallel-gate"
+              className={`relative z-10 flex flex-col items-center bg-surface px-1 ${
+                clickable ? '' : 'opacity-70'
+              }`}
+            >
+              {/* Validación arriba del eje */}
+              <button
+                type="button"
+                disabled={!clickable}
+                onClick={() => clickable && onSelect(topPhase)}
+                aria-current={inParallel && !topDone ? 'step' : undefined}
+                aria-pressed={selectedPhase === topPhase}
+                className={`flex flex-col items-center gap-1.5 ${
+                  clickable ? 'cursor-pointer' : 'cursor-not-allowed'
+                }`}
+              >
+                <span className={topVisual.labelClass}>
+                  {phaseDisplayName(topPhase, flowType)}
+                </span>
+                <span className={topVisual.circleClass}>
+                  {renderStepIcon(topVisual.icon)}
+                </span>
+              </button>
+
+              {/* Conector vertical: el flujo horizontal lo corta a mitad → lectura en paralelo */}
+              <span
+                className={`w-0.5 h-4 my-0.5 shrink-0 ${
+                  inParallel || pastParallelGate ? 'bg-accent/50' : 'bg-slate-200'
+                }`}
+                aria-hidden
+              />
+
+              {/* Legal debajo del eje */}
+              <button
+                type="button"
+                disabled={!clickable}
+                onClick={() => clickable && onSelect(bottomPhase)}
+                aria-current={inParallel && !bottomDone ? 'step' : undefined}
+                aria-pressed={selectedPhase === bottomPhase}
+                className={`flex flex-col items-center gap-1.5 ${
+                  clickable ? 'cursor-pointer' : 'cursor-not-allowed'
+                }`}
+              >
+                <span className={bottomVisual.circleClass}>
+                  {renderStepIcon(bottomVisual.icon)}
+                </span>
+                <span className={bottomVisual.labelClass}>
+                  {phaseDisplayName(bottomPhase, flowType)}
+                </span>
+              </button>
+            </div>
+          );
         }
-        if (isSelected && clickable) {
-          circleClass += isApproved
-            ? ' ring-4 ring-emerald-500/25 shadow-sm scale-105'
-            : ' ring-4 ring-accent/20 shadow-sm scale-105';
+
+        const phase = slot.phase;
+        const isCompleted = slotIndex < currentSlotIdx;
+        const isCurrent = slotIndex === currentSlotIdx;
+        const isApproved = isCurrent && phase === 'Aprobado';
+        const isSelected = phase === selectedPhase;
+        const visual = pipelineStepVisual({
+          isCompleted,
+          isCurrent,
+          isApproved,
+          isSelected,
+          clickable,
+        });
+
+        // Con gate paralelo: círculo en el eje; etiqueta debajo sin desplazar el centro.
+        if (hasParallelSlot) {
+          return (
+            <button
+              key={phase}
+              type="button"
+              disabled={!clickable}
+              onClick={() => clickable && onSelect(phase)}
+              aria-current={isCurrent ? 'step' : undefined}
+              aria-pressed={isSelected}
+              className={`relative z-10 flex flex-col items-center px-2 w-[5.5rem] ${
+                clickable ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'
+              }`}
+            >
+              <span className={visual.circleClass}>
+                {renderStepIcon(visual.icon)}
+              </span>
+              <span
+                className={`${visual.labelClass} absolute top-[calc(50%+1.35rem)] left-1/2 -translate-x-1/2 w-[5.5rem]`}
+              >
+                {phaseDisplayName(phase, flowType)}
+              </span>
+            </button>
+          );
         }
 
         return (
@@ -136,31 +366,11 @@ const Pipeline: React.FC<PipelineProps> = ({ currentPhase, selectedPhase, onSele
               clickable ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'
             }`}
           >
-            <span className={circleClass}>
-              {isCompleted || isApproved ? (
-                <CheckCircle2 size={20} />
-              ) : isCurrent ? (
-                <Clock size={20} />
-              ) : (
-                <Circle size={20} />
-              )}
+            <span className={visual.circleClass}>
+              {renderStepIcon(visual.icon)}
             </span>
-            <span
-              className={`text-xs font-medium text-center max-w-[88px] ${
-                isSelected
-                  ? isApproved
-                    ? 'text-emerald-700 font-semibold'
-                    : 'text-accent font-semibold'
-                  : isApproved
-                    ? 'text-emerald-700 font-semibold'
-                    : isCurrent
-                      ? 'text-accent'
-                      : isCompleted
-                        ? 'text-slate-700'
-                        : 'text-slate-400'
-              }`}
-            >
-              {label}
+            <span className={visual.labelClass}>
+              {phaseDisplayName(phase, flowType)}
             </span>
           </button>
         );
@@ -358,7 +568,7 @@ const DesignPhaseView: React.FC<DesignPhaseProps> = ({ projectId, onPreviewImage
             project.regulatoryContact ? (
               <div>
                 <p className="text-xs uppercase tracking-wide text-slate-400 font-semibold mb-1">
-                  Regulatory
+                  I+D
                 </p>
                 {project.regulatoryAssigneeType === 'agent' && project.regulatoryAgentName ? (
                   <p className="font-medium text-primary inline-flex items-center gap-1.5 flex-wrap">
@@ -441,39 +651,55 @@ const DesignPhaseView: React.FC<DesignPhaseProps> = ({ projectId, onPreviewImage
           {/* Multi-file briefing (new format) */}
           {(project.briefing?.files?.length ?? 0) > 0 && (
             <ul className="space-y-2">
-              {project.briefing!.files!.map((f, idx) => (
-                <li key={idx} className="flex items-center gap-3 p-3 bg-slate-50 border border-border rounded-lg">
-                  <div className="w-9 h-9 rounded-md bg-red-50 text-red-600 flex items-center justify-center font-bold text-[10px] shrink-0">
-                    {f.mimeType.includes('pdf') ? 'PDF' : f.name.split('.').pop()?.toUpperCase().slice(0, 3) ?? 'DOC'}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-primary truncate">{f.name}</p>
-                    <p className="text-xs text-slate-500">{f.sizeKb.toLocaleString()} KB</p>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (f.mimeType.includes('pdf')) {
-                          setBriefingPdfPreview({ fileName: f.name, dataUrl: f.dataUrl });
-                        } else {
-                          openDataUrlInTab(f.dataUrl, f.mimeType);
-                        }
-                      }}
-                      className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:text-accent-hover px-2.5 py-1.5 rounded-md border border-accent/30 hover:bg-accent/5 transition-colors"
-                    >
-                      <ExternalLink size={12} /> Ver
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void downloadAttachment(f)}
-                      className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-primary px-2.5 py-1.5 rounded-md border border-border hover:bg-slate-100 transition-colors"
-                    >
-                      Descargar
-                    </button>
-                  </div>
-                </li>
-              ))}
+              {project.briefing!.files!.map((f, idx) => {
+                const allowed = canAccessWorkflowFile(activeRole, {
+                  mimeType: f.mimeType,
+                  fileName: f.name,
+                });
+                return (
+                  <li key={idx} className="flex items-center gap-3 p-3 bg-slate-50 border border-border rounded-lg">
+                    <div className="w-9 h-9 rounded-md bg-red-50 text-red-600 flex items-center justify-center font-bold text-[10px] shrink-0">
+                      {f.mimeType.includes('pdf')
+                        ? 'PDF'
+                        : f.name.split('.').pop()?.toUpperCase().slice(0, 3) ?? 'DOC'}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-primary truncate">{f.name}</p>
+                      <p className="text-xs text-slate-500">
+                        {allowed
+                          ? `${f.sizeKb.toLocaleString()} KB`
+                          : 'Solo disponible para Diseño y Marketing'}
+                      </p>
+                    </div>
+                    {allowed ? (
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (f.mimeType.includes('pdf')) {
+                              setBriefingPdfPreview({ fileName: f.name, dataUrl: f.dataUrl });
+                            } else {
+                              openDataUrlInTab(f.dataUrl, f.mimeType);
+                            }
+                          }}
+                          className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:text-accent-hover px-2.5 py-1.5 rounded-md border border-accent/30 hover:bg-accent/5 transition-colors"
+                        >
+                          <ExternalLink size={12} /> Ver
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void downloadAttachment(f)}
+                          className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-primary px-2.5 py-1.5 rounded-md border border-border hover:bg-slate-100 transition-colors"
+                        >
+                          Descargar
+                        </button>
+                      </div>
+                    ) : (
+                      <Lock size={14} className="text-slate-400 shrink-0" />
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
           {/* Legacy single-file (backward compat) */}
@@ -485,13 +711,31 @@ const DesignPhaseView: React.FC<DesignPhaseProps> = ({ projectId, onPreviewImage
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-primary truncate">{project.briefing.fileName}</p>
                 <p className="text-xs text-slate-500">
-                  {project.briefing.fileSizeKb ? `${project.briefing.fileSizeKb.toLocaleString()} KB` : 'Subido'}
-                  {project.briefing.uploadedAt && (
-                    <><span className="mx-1.5">·</span>{formatDate(project.briefing.uploadedAt)}</>
+                  {canAccessWorkflowFile(activeRole, {
+                    mimeType: project.briefing.mimeType,
+                    fileName: project.briefing.fileName,
+                  }) ? (
+                    <>
+                      {project.briefing.fileSizeKb
+                        ? `${project.briefing.fileSizeKb.toLocaleString()} KB`
+                        : 'Subido'}
+                      {project.briefing.uploadedAt && (
+                        <>
+                          <span className="mx-1.5">·</span>
+                          {formatDate(project.briefing.uploadedAt)}
+                        </>
+                      )}
+                    </>
+                  ) : (
+                    'Solo disponible para Diseño y Marketing'
                   )}
                 </p>
               </div>
-              {project.briefing.dataUrl && (
+              {project.briefing.dataUrl &&
+                canAccessWorkflowFile(activeRole, {
+                  mimeType: project.briefing.mimeType,
+                  fileName: project.briefing.fileName,
+                }) && (
                 <div className="flex items-center gap-1.5 shrink-0">
                   <button
                     type="button"
@@ -842,9 +1086,18 @@ const PdfThumbnail: React.FC<{ att: ProjectAttachment; onClick: () => void }> = 
 interface AttachmentGalleryProps {
   attachments: ProjectAttachment[];
   onPreviewImage: (att: ProjectAttachment) => void;
+  /** Rol activo: ZIP/vídeo/nativos solo Diseño y Marketing. */
+  role?: string;
 }
 
-const AttachmentGallery: React.FC<AttachmentGalleryProps> = ({ attachments, onPreviewImage }) => {
+const AttachmentGallery: React.FC<AttachmentGalleryProps> = ({
+  attachments,
+  onPreviewImage,
+  role,
+}) => {
+  const { activeRole } = useAppStore();
+  const viewerRole = role ?? activeRole;
+
   if (attachments.length === 0) {
     return (
       <p className="text-sm text-slate-400">
@@ -852,13 +1105,29 @@ const AttachmentGallery: React.FC<AttachmentGalleryProps> = ({ attachments, onPr
       </p>
     );
   }
-  // Images, PDFs and videos are previewable / annotatable
+
+  // PDF e imagen: siempre visibles. Vídeo y resto: según rol.
   const previewable = attachments.filter(
-    (a) => a.isImage || a.isPdf || a.isVideo || a.mimeType.startsWith('video/'),
+    (a) => a.isImage || a.isPdf,
+  );
+  const restrictedMedia = attachments.filter(
+    (a) =>
+      !(a.isImage || a.isPdf) &&
+      (a.isVideo || a.mimeType.startsWith('video/')),
   );
   const others = attachments.filter(
-    (a) => !(a.isImage || a.isPdf || a.isVideo || a.mimeType.startsWith('video/')),
+    (a) =>
+      !(a.isImage || a.isPdf) &&
+      !(a.isVideo || a.mimeType.startsWith('video/')),
   );
+
+  const canSeeRestricted = (file: ProjectAttachment) =>
+    canAccessWorkflowFile(viewerRole, {
+      mimeType: file.mimeType,
+      fileName: file.fileName,
+      isImage: file.isImage,
+      isPdf: file.isPdf,
+    });
 
   return (
     <div className="space-y-4">
@@ -867,7 +1136,30 @@ const AttachmentGallery: React.FC<AttachmentGalleryProps> = ({ attachments, onPr
           {previewable.map((att) =>
             att.isPdf ? (
               <PdfThumbnail key={att.id} att={att} onClick={() => onPreviewImage(att)} />
-            ) : att.isVideo || att.mimeType.startsWith('video/') ? (
+            ) : (
+              <button
+                key={att.id}
+                type="button"
+                onClick={() => onPreviewImage(att)}
+                className="group relative aspect-[4/5] overflow-hidden rounded-lg border border-border bg-slate-50 hover:border-accent transition-colors"
+              >
+                <img
+                  src={att.dataUrl}
+                  alt={att.fileName}
+                  className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                />
+                <span className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-slate-900/70 to-transparent px-2 py-2 text-[11px] text-white truncate">
+                  {att.fileName}
+                </span>
+              </button>
+            ),
+          )}
+        </div>
+      )}
+      {restrictedMedia.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {restrictedMedia.map((att) =>
+            canSeeRestricted(att) ? (
               <button
                 key={att.id}
                 type="button"
@@ -891,52 +1183,56 @@ const AttachmentGallery: React.FC<AttachmentGalleryProps> = ({ attachments, onPr
                 </span>
               </button>
             ) : (
-              <button
+              <div
                 key={att.id}
-                type="button"
-                onClick={() => onPreviewImage(att)}
-                className="group relative aspect-[4/5] overflow-hidden rounded-lg border border-border bg-slate-50 hover:border-accent transition-colors"
+                className="relative aspect-video overflow-hidden rounded-lg border border-border bg-slate-100 flex flex-col items-center justify-center gap-1 px-2 text-center"
+                title="Solo disponible para Diseño y Marketing"
               >
-                <img
-                  src={att.dataUrl}
-                  alt={att.fileName}
-                  className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                />
-                <span className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-slate-900/70 to-transparent px-2 py-2 text-[11px] text-white truncate">
-                  {att.fileName}
-                </span>
-              </button>
+                <Lock size={16} className="text-slate-400" />
+                <span className="text-[11px] text-slate-500 truncate w-full">{att.fileName}</span>
+              </div>
             ),
           )}
         </div>
       )}
       {others.length > 0 && (
         <ul className="space-y-2">
-          {others.map((file) => (
-            <li
-              key={file.id}
-              className="flex items-center gap-3 p-2.5 bg-slate-50 border border-border rounded-md"
-            >
-              <div className="w-10 h-10 rounded-md bg-white border border-border flex items-center justify-center text-slate-500">
-                <ImageIcon size={18} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-primary truncate">{file.fileName}</p>
-                <p className="text-xs text-slate-500">
-                  {formatFileSize(file.fileSizeKb)}
-                  <span className="mx-1.5">·</span>
-                  {file.mimeType || 'Archivo'}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => void downloadAttachment(file)}
-                className="text-xs font-medium text-accent hover:text-accent-hover"
+          {others.map((file) => {
+            const allowed = canSeeRestricted(file);
+            return (
+              <li
+                key={file.id}
+                className="flex items-center gap-3 p-2.5 bg-slate-50 border border-border rounded-md"
               >
-                Descargar
-              </button>
-            </li>
-          ))}
+                <div className="w-10 h-10 rounded-md bg-white border border-border flex items-center justify-center text-slate-500">
+                  {allowed ? <ImageIcon size={18} /> : <Lock size={16} />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-primary truncate">{file.fileName}</p>
+                  <p className="text-xs text-slate-500">
+                    {allowed ? (
+                      <>
+                        {formatFileSize(file.fileSizeKb)}
+                        <span className="mx-1.5">·</span>
+                        {file.mimeType || 'Archivo'}
+                      </>
+                    ) : (
+                      'Solo disponible para Diseño y Marketing'
+                    )}
+                  </p>
+                </div>
+                {allowed && (
+                  <button
+                    type="button"
+                    onClick={() => void downloadAttachment(file)}
+                    className="text-xs font-medium text-accent hover:text-accent-hover"
+                  >
+                    Descargar
+                  </button>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
@@ -960,6 +1256,10 @@ interface ReviewPhaseViewProps {
   /** Rechazo de la fase siguiente que devolvió el proyecto aquí (p. ej. Legal → Validación diseño). */
   pendingIncomingRejection?: PhaseAction;
   flowType?: string | null;
+  /** Esta vía del gate paralelo ya está aprobada en el ciclo actual. */
+  parallelTrackApproved?: boolean;
+  /** La otra vía del gate paralelo ya está aprobada. */
+  parallelSiblingApproved?: boolean;
 }
 
 const ReviewPhaseView: React.FC<ReviewPhaseViewProps> = ({
@@ -976,14 +1276,60 @@ const ReviewPhaseView: React.FC<ReviewPhaseViewProps> = ({
   canAddDesignFiles,
   pendingIncomingRejection,
   flowType,
+  parallelTrackApproved,
+  parallelSiblingApproved,
 }) => {
   const isFinalPhase = selectedPhase === 'Aprobación final';
   const isAprobado = selectedPhase === 'Aprobado';
   const phaseLabel = phaseDisplayName(selectedPhase, flowType);
   const isAv = isAudiovisualFlow(flowType);
+  const isParallelTrack = !isAv && isParallelReviewPhase(selectedPhase);
+  const canAct =
+    isCurrent &&
+    !isAprobado &&
+    canApprovePhase(activeRole, selectedPhase) &&
+    !parallelTrackApproved;
+  const canAccessArteFinal = arteFinal
+    ? canAccessWorkflowFile(activeRole, {
+        mimeType: arteFinal.attachment.mimeType,
+        fileName: arteFinal.attachment.fileName,
+        isImage: arteFinal.attachment.isImage,
+        isPdf: arteFinal.attachment.isPdf,
+      })
+    : false;
 
   return (
     <div className="space-y-6">
+      {isParallelTrack && isCurrent && (
+        <Card className="border-accent/30 bg-accent/5">
+          <CardContent className="py-3 text-sm text-slate-700">
+            {parallelTrackApproved ? (
+              <p>
+                <strong>{phaseLabel}</strong> ya está aprobada en este ciclo.
+                {!parallelSiblingApproved && (
+                  <span className="text-slate-500">
+                    {' '}
+                    Falta la otra vía (Validación / Legal) para pasar a Arte final.
+                  </span>
+                )}
+              </p>
+            ) : (
+              <p>
+                Validación de diseño y Aprobación Legal se revisan{' '}
+                <strong>en paralelo</strong>. Puedes aprobar esta vía aunque la otra
+                siga pendiente; hace falta el OK de ambas para avanzar a Arte final.
+                Si cualquiera rechaza, el proyecto vuelve a Creación Desarrollo.
+                {parallelSiblingApproved && (
+                  <span className="block mt-1 text-emerald-700">
+                    La otra vía ya está aprobada — al aprobar esta se avanzará a Arte
+                    final.
+                  </span>
+                )}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
       {pendingIncomingRejection && (
         <Card className="border-red-300 bg-red-50/80">
           <CardContent className="flex items-start gap-3 py-4">
@@ -1020,7 +1366,7 @@ const ReviewPhaseView: React.FC<ReviewPhaseViewProps> = ({
                     </p>
                   </div>
                 </div>
-                {arteFinal && (
+                {arteFinal && canAccessArteFinal && (
                   <button
                     type="button"
                     onClick={() => void downloadAttachment(arteFinal.attachment)}
@@ -1041,14 +1387,20 @@ const ReviewPhaseView: React.FC<ReviewPhaseViewProps> = ({
                 <div>
                   <CardTitle>Arte Final</CardTitle>
                   <p className="text-xs text-slate-500 mt-1">
-                    Subido por {arteFinal.uploadedBy} · {arteFinal.attachment.fileName}
-                    {arteFinal.attachment.fileSizeKb > 0 && (
-                      <> · {(arteFinal.attachment.fileSizeKb / 1024).toFixed(1)} MB</>
+                    {canAccessArteFinal ? (
+                      <>
+                        Subido por {arteFinal.uploadedBy} · {arteFinal.attachment.fileName}
+                        {arteFinal.attachment.fileSizeKb > 0 && (
+                          <> · {(arteFinal.attachment.fileSizeKb / 1024).toFixed(1)} MB</>
+                        )}
+                      </>
+                    ) : (
+                      'Archivo restringido · solo Diseño y Marketing'
                     )}
                   </p>
                 </div>
                 {/* En Aprobado basta el botón grande «Descargar arte final» del banner */}
-                {!isAprobado && (
+                {!isAprobado && canAccessArteFinal && (
                   <button
                     type="button"
                     onClick={() => void downloadAttachment(arteFinal.attachment)}
@@ -1059,7 +1411,12 @@ const ReviewPhaseView: React.FC<ReviewPhaseViewProps> = ({
                 )}
               </CardHeader>
               <CardContent>
-                {isZipAttachment(arteFinal.attachment) ? (
+                {!canAccessArteFinal ? (
+                  <div className="flex items-center gap-2 text-sm text-slate-500 py-6 justify-center">
+                    <Lock size={16} />
+                    Este archivo no es PDF ni imagen: solo Diseño y Marketing pueden abrirlo.
+                  </div>
+                ) : isZipAttachment(arteFinal.attachment) ? (
                   <ZipExplorer
                     dataUrl={arteFinal.attachment.dataUrl || arteFinal.attachment.downloadUrl || ''}
                     fileName={arteFinal.attachment.fileName}
@@ -1222,8 +1579,8 @@ const ReviewPhaseView: React.FC<ReviewPhaseViewProps> = ({
         </Card>
       )}
 
-      {/* Acciones — solo roles autorizados para esta fase */}
-      {isCurrent && !isAprobado && canApprovePhase(activeRole, selectedPhase) && (
+      {/* Acciones — solo roles autorizados para esta fase / vía */}
+      {canAct && (
         <Card>
           <CardContent className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
@@ -1336,6 +1693,14 @@ const FinalPrepView: React.FC<FinalPrepViewProps> = ({
     ? formatFileSize(Math.max(1, Math.round(pendingFile.size / 1024)))
     : '';
   const canSend = Boolean(pendingFile || arteFinal);
+  const canAccessArte = arteFinal
+    ? canAccessWorkflowFile(activeRole, {
+        mimeType: arteFinal.attachment.mimeType,
+        fileName: arteFinal.attachment.fileName,
+        isImage: arteFinal.attachment.isImage,
+        isPdf: arteFinal.attachment.isPdf,
+      })
+    : false;
 
   return (
     <div className="space-y-6">
@@ -1347,12 +1712,14 @@ const FinalPrepView: React.FC<FinalPrepViewProps> = ({
               {pendingFile
                 ? 'Revisa el archivo antes de enviarlo a aprobación final.'
                 : arteFinal
-                  ? `Subido por ${arteFinal.uploadedBy} el ${formatDateTime(arteFinal.createdAt)}`
+                  ? canAccessArte
+                    ? `Subido por ${arteFinal.uploadedBy} el ${formatDateTime(arteFinal.createdAt)}`
+                    : 'Archivo restringido · solo Diseño y Marketing'
                   : 'Selecciona el archivo de arte final / master para enviarlo a aprobación.'}
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {arteFinal && (
+            {arteFinal && canAccessArte && (
               <button
                 type="button"
                 onClick={() =>
@@ -1437,7 +1804,12 @@ const FinalPrepView: React.FC<FinalPrepViewProps> = ({
               ) : null}
             </div>
           ) : arteFinal && !pendingFile ? (
-            isZip ? (
+            !canAccessArte ? (
+              <div className="flex items-center justify-center gap-2 text-sm text-slate-500 py-10">
+                <Lock size={16} />
+                Este archivo no es PDF ni imagen: solo Diseño y Marketing pueden abrirlo.
+              </div>
+            ) : isZip ? (
               <ZipExplorer
                 dataUrl={arteFinal.attachment.dataUrl || arteFinal.attachment.downloadUrl || ''}
                 fileName={arteFinal.attachment.fileName}
@@ -1660,7 +2032,7 @@ const DesarrolloPhaseView: React.FC<DesarrolloPhaseViewProps> = ({
             </p>
             <p className="text-xs text-slate-500 mt-1">
               {desarrolloProposal
-                ? `"${desarrolloProposal.name}" (${desarrolloProposal.version}) — el proyecto avanzó a Validación diseño`
+                ? `"${desarrolloProposal.name}" (${desarrolloProposal.version}) — enviado a Validación y Aprobación Legal (en paralelo)`
                 : isCurrent
                   ? 'Usa el botón «Subir archivo de desarrollo» en la cabecera para adjuntar el archivo técnico.'
                   : ''}
@@ -1804,6 +2176,41 @@ export const TabResumen = ({
     );
   }, [project, developmentRejectionChain.length]);
 
+  const parallelCycleStart = useMemo(
+    () =>
+      getParallelCycleStart(
+        projectActions,
+        projectId,
+        latestDesarrolloProposal?.createdAt,
+      ),
+    [projectActions, projectId, latestDesarrolloProposal?.createdAt],
+  );
+
+  const parallelApproved = useMemo(() => {
+    if (!project || !isInParallelGate(project.phase, project.flowType)) {
+      return undefined;
+    }
+    return {
+      'Validación diseño': hasParallelTrackApproval(
+        projectActions,
+        projectId,
+        'Validación diseño',
+        parallelCycleStart,
+      ),
+      'Aprobación Legal': hasParallelTrackApproval(
+        projectActions,
+        projectId,
+        'Aprobación Legal',
+        parallelCycleStart,
+      ),
+    } as Partial<Record<ProjectPhase, boolean>>;
+  }, [
+    project,
+    projectActions,
+    projectId,
+    parallelCycleStart,
+  ]);
+
   const [commentOpen, setCommentOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [approveOpen, setApproveOpen] = useState(false);
@@ -1831,7 +2238,10 @@ export const TabResumen = ({
     );
   }
 
-  const isCurrent = selectedPhase === project.phase;
+  const inParallelGate = isInParallelGate(project.phase, project.flowType);
+  const isCurrent =
+    selectedPhase === project.phase ||
+    (inParallelGate && isParallelReviewPhase(selectedPhase));
   const canDesignRole = activeRole === 'Diseño' || activeRole === 'Admin';
   const canAddFilesOnDesignReview =
     Boolean(onOpenUpload) &&
@@ -1839,6 +2249,20 @@ export const TabResumen = ({
     isCurrent &&
     project.phase === 'Aprobación Diseño';
   const phaseSpecificActions = projectActions.filter((a) => a.phase === selectedPhase);
+  const parallelTrackApproved = Boolean(
+    inParallelGate &&
+      isParallelReviewPhase(selectedPhase) &&
+      parallelApproved?.[selectedPhase],
+  );
+  const parallelSiblingApproved = Boolean(
+    inParallelGate &&
+      isParallelReviewPhase(selectedPhase) &&
+      parallelApproved?.[
+        selectedPhase === 'Validación diseño' ? 'Aprobación Legal' : 'Validación diseño'
+      ],
+  );
+  const actionTrackPhase =
+    inParallelGate && isParallelReviewPhase(selectedPhase) ? selectedPhase : undefined;
 
   return (
     <div className="space-y-8">
@@ -1858,6 +2282,7 @@ export const TabResumen = ({
             selectedPhase={selectedPhase}
             onSelect={setSelectedPhase}
             flowType={project.flowType}
+            parallelApproved={parallelApproved}
           />
         </CardContent>
       </Card>
@@ -1906,26 +2331,28 @@ export const TabResumen = ({
           }
           pendingIncomingRejection={pendingIncomingRejection}
           flowType={project.flowType}
+          parallelTrackApproved={parallelTrackApproved}
+          parallelSiblingApproved={parallelSiblingApproved}
         />
       ) : null}
 
       <CommentModal
         open={commentOpen}
         onClose={() => setCommentOpen(false)}
-        currentPhase={project.phase}
+        currentPhase={actionTrackPhase ?? project.phase}
         onSubmit={(text) => commentOnPhase(projectId, text)}
       />
       <RejectModal
         open={rejectOpen}
         onClose={() => setRejectOpen(false)}
-        currentPhase={project.phase}
-        onSubmit={(text) => rejectCurrentPhase(projectId, text)}
+        currentPhase={actionTrackPhase ?? project.phase}
+        onSubmit={(text) => rejectCurrentPhase(projectId, text, actionTrackPhase)}
       />
       <ApproveModal
         open={approveOpen}
         onClose={() => setApproveOpen(false)}
-        currentPhase={project.phase}
-        onSubmit={(text) => approveCurrentPhase(projectId, text)}
+        currentPhase={actionTrackPhase ?? project.phase}
+        onSubmit={(text) => approveCurrentPhase(projectId, text, actionTrackPhase)}
       />
 
       {activeAttachment && annotatorProposalResolved && (

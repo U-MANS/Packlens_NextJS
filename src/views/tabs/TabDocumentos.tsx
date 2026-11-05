@@ -10,6 +10,7 @@ import {
   Image as ImageIcon,
   ImagePlus,
   Loader2,
+  Lock,
   ScanText,
   X,
 } from 'lucide-react';
@@ -19,6 +20,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { extractPdfText, renderPdfPage } from '../../utils/pdfRenderer';
 import type { PdfPageText } from '../../utils/pdfRenderer';
 import { formatFileSize, downloadAttachment } from '../../utils/files';
+import { canAccessWorkflowFile } from '../../utils/fileAccess';
 import { formatDate } from '../../utils/dates';
 import type { ProjectPhase } from '../../types';
 import { toast } from '../../components/ui/Toast';
@@ -321,13 +323,22 @@ const AnalyseButton: React.FC<{ entry: DocEntry }> = ({ entry }) => {
 const PhaseGroup: React.FC<{
   phase: string;
   entries: DocEntry[];
+  role: string;
   onPreviewPdf?: (entry: DocEntry) => void;
-}> = ({ phase, entries, onPreviewPdf }) => {
+}> = ({ phase, entries, role, onPreviewPdf }) => {
   const [expanded, setExpanded] = useState(true);
   const style = phaseStyle(phase);
+  const downloadable = entries.filter((e) =>
+    canAccessWorkflowFile(role, {
+      mimeType: e.mimeType,
+      fileName: e.fileName,
+      isImage: e.isImage,
+      isPdf: e.isPdf,
+    }),
+  );
 
   const handleDownloadAll = () => {
-    entries.forEach((e) => {
+    downloadable.forEach((e) => {
       void downloadAttachment(e);
     });
   };
@@ -351,64 +362,92 @@ const PhaseGroup: React.FC<{
             className={`text-slate-400 shrink-0 ml-auto transition-transform ${expanded ? 'rotate-90' : ''}`}
           />
         </button>
-        <button
-          type="button"
-          onClick={handleDownloadAll}
-          className="hidden sm:inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-accent px-2.5 py-1.5 rounded-md border border-border hover:border-accent/40 hover:bg-accent/5 transition-colors shrink-0"
-        >
-          <Download size={12} /> Descargar todos
-        </button>
+        {downloadable.length > 0 && (
+          <button
+            type="button"
+            onClick={handleDownloadAll}
+            className="hidden sm:inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-accent px-2.5 py-1.5 rounded-md border border-border hover:border-accent/40 hover:bg-accent/5 transition-colors shrink-0"
+          >
+            <Download size={12} /> Descargar todos
+          </button>
+        )}
       </div>
 
       {/* File grid */}
       {expanded && (
         <div className="border-t border-border divide-y divide-border">
-          {entries.map((entry) => (
-            <div key={entry.id} className="flex items-center gap-4 px-5 py-3 hover:bg-slate-50 transition-colors">
-              <Thumbnail entry={entry} />
+          {entries.map((entry) => {
+            const canAccess = canAccessWorkflowFile(role, {
+              mimeType: entry.mimeType,
+              fileName: entry.fileName,
+              isImage: entry.isImage,
+              isPdf: entry.isPdf,
+            });
+            return (
+              <div
+                key={entry.id}
+                className={`flex items-center gap-4 px-5 py-3 transition-colors ${
+                  canAccess ? 'hover:bg-slate-50' : 'bg-slate-50/40 opacity-80'
+                }`}
+              >
+                <Thumbnail entry={entry} />
 
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-primary truncate">{entry.fileName}</p>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  {formatFileSize(entry.fileSizeKb)}
-                  {entry.proposalName && (
-                    <span className="ml-1.5 text-slate-400">· {entry.proposalName}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-primary truncate">{entry.fileName}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {formatFileSize(entry.fileSizeKb)}
+                    {entry.proposalName && (
+                      <span className="ml-1.5 text-slate-400">· {entry.proposalName}</span>
+                    )}
+                  </p>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {canAccess
+                      ? `${entry.uploadedBy} · ${formatDate(entry.uploadedAt)}`
+                      : 'Solo disponible para Diseño y Marketing'}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  {canAccess ? (
+                    <>
+                      {entry.isPdf && onPreviewPdf && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onPreviewPdf(entry);
+                          }}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-md border border-border text-slate-600 hover:text-accent hover:border-accent/40 hover:bg-accent/5 transition-colors"
+                          title="Ver PDF"
+                        >
+                          <Eye size={13} /> Ver
+                        </button>
+                      )}
+                      {entry.isPdf && <AnalyseButton entry={entry} />}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void downloadAttachment(entry);
+                        }}
+                        className="p-2 text-slate-400 hover:text-accent hover:bg-accent/5 rounded-md transition-colors"
+                        title="Descargar"
+                      >
+                        <Download size={16} />
+                      </button>
+                    </>
+                  ) : (
+                    <span
+                      className="inline-flex items-center gap-1 px-2 py-1 text-xs text-slate-400"
+                      title="Archivo restringido a Diseño y Marketing"
+                    >
+                      <Lock size={13} />
+                    </span>
                   )}
-                </p>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  {entry.uploadedBy} · {formatDate(entry.uploadedAt)}
-                </p>
+                </div>
               </div>
-
-              <div className="flex items-center gap-2 shrink-0">
-                {entry.isPdf && onPreviewPdf && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onPreviewPdf(entry);
-                    }}
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-md border border-border text-slate-600 hover:text-accent hover:border-accent/40 hover:bg-accent/5 transition-colors"
-                    title="Ver PDF"
-                  >
-                    <Eye size={13} /> Ver
-                  </button>
-                )}
-                {entry.isPdf && <AnalyseButton entry={entry} />}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void downloadAttachment(entry);
-                  }}
-                  className="p-2 text-slate-400 hover:text-accent hover:bg-accent/5 rounded-md transition-colors"
-                  title="Descargar"
-                >
-                  <Download size={16} />
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -578,8 +617,21 @@ export const TabDocumentos = ({ projectId }: { projectId: string }) => {
     .map((p) => ({ phase: p, entries: map.get(p)! }));
   }, [allEntries]);
 
+  const accessibleEntries = useMemo(
+    () =>
+      allEntries.filter((e) =>
+        canAccessWorkflowFile(activeRole, {
+          mimeType: e.mimeType,
+          fileName: e.fileName,
+          isImage: e.isImage,
+          isPdf: e.isPdf,
+        }),
+      ),
+    [allEntries, activeRole],
+  );
+
   const handleDownloadAll = () => {
-    allEntries.forEach((e) => {
+    accessibleEntries.forEach((e) => {
       void downloadAttachment(e);
     });
   };
@@ -653,7 +705,7 @@ export const TabDocumentos = ({ projectId }: { projectId: string }) => {
           <button
             type="button"
             onClick={handleDownloadAll}
-            disabled={allEntries.length === 0}
+            disabled={accessibleEntries.length === 0}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-accent text-white hover:bg-accent-hover text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Download size={15} /> Descargar todos
@@ -676,6 +728,7 @@ export const TabDocumentos = ({ projectId }: { projectId: string }) => {
               key={phase}
               phase={phase}
               entries={entries}
+              role={activeRole}
               onPreviewPdf={setPdfPreview}
             />
           ))}

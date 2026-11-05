@@ -32,6 +32,8 @@ interface AuthState {
   logout: () => Promise<void>;
   restoreSession: () => Promise<boolean>;
   clearError: () => void;
+  /** Actualiza campos del usuario en sesión (p. ej. tras cambiarse el rol a sí mismo). */
+  patchSessionUser: (partial: Partial<AuthUser>) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -197,6 +199,12 @@ export const useAuthStore = create<AuthState>()(
       },
 
       clearError: () => set({ error: null }),
+
+      patchSessionUser: (partial) => {
+        const current = get().user;
+        if (!current) return;
+        set({ user: { ...current, ...partial } });
+      },
     }),
     {
       name: 'packlens-auth',

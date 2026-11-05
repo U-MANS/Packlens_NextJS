@@ -92,6 +92,25 @@ export function isDesignUploadPhase(phase: string): boolean {
   return DESIGN_UPLOAD_PHASES.has(phase);
 }
 
+/** Validación diseño + Aprobación Legal: gate paralelo (solo flujo packaging). */
+export const PARALLEL_REVIEW_PHASES = ['Validación diseño', 'Aprobación Legal'] as const;
+
+export function isParallelReviewPhase(phase: string): boolean {
+  return (PARALLEL_REVIEW_PHASES as readonly string[]).includes(phase);
+}
+
+/** El proyecto está en el gate paralelo (cualquier ancla del par). */
+export function isInParallelGate(phase: string, flowType?: string | null): boolean {
+  if (isAudiovisualFlow(flowType)) return false;
+  return isParallelReviewPhase(phase);
+}
+
+/** Tras rechazo de cualquiera de las dos vías. */
+export const PARALLEL_REJECT_TARGET = 'Creación Desarrollo';
+
+/** Destino cuando ambas vías están aprobadas. */
+export const PARALLEL_ADVANCE_TARGET = 'Arte final';
+
 /** Fase inicial al crear un proyecto según el flujo. */
 export function initialPhaseForFlow(flowType?: string | null): string {
   return isAudiovisualFlow(flowType) ? 'Creación Desarrollo' : 'Diseño';

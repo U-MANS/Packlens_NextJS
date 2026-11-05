@@ -30,6 +30,10 @@ const LIFECYCLE_STYLES: Record<LifecycleStatus, string> = {
   Vigente: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   Temporal: 'bg-blue-50 text-blue-700 border-blue-200',
   Obsoleta: 'bg-red-50 text-red-600 border-red-200',
+  'En proceso de cambio':
+    'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-500/15 dark:text-orange-300 dark:border-orange-500/35',
+  Sustituido:
+    'bg-slate-200 text-slate-600 border-slate-300 dark:bg-slate-500/25 dark:text-slate-300 dark:border-slate-500/40',
 };
 
 const LifecycleBadge = ({ status }: { status: LifecycleStatus }) => (
@@ -288,14 +292,22 @@ const Library = () => {
                         </p>
                       </div>
                       <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
+                        {/* table-fixed + anchos fijos: alinea Estado/Fase entre formatos */}
+                        <table className="w-full text-sm table-fixed">
+                          <colgroup>
+                            <col className="w-[34%]" />
+                            <col className="w-[16%]" />
+                            <col className="w-[22%]" />
+                            <col className="w-[14%]" />
+                            <col className="w-[14%]" />
+                          </colgroup>
                           <thead>
                             <tr className="text-left text-xs text-slate-400 border-b border-border">
                               <th className="px-5 py-3 font-medium">Producto</th>
                               <th className="px-5 py-3 font-medium">Estado</th>
                               <th className="px-5 py-3 font-medium">Fase actual</th>
                               <th className="px-5 py-3 font-medium">Versiones</th>
-                              <th className="px-5 py-3 font-medium w-28" />
+                              <th className="px-5 py-3 font-medium" />
                             </tr>
                           </thead>
                           <tbody>
@@ -311,10 +323,16 @@ const Library = () => {
                                   }
                                 >
                                   <td className="px-5 py-4">
-                                    <p className="font-medium text-primary">{product.name}</p>
-                                    <p className="text-xs text-slate-400 font-mono mt-0.5">{product.skuBase}</p>
+                                    <p className="font-medium text-primary truncate" title={product.name}>
+                                      {product.name}
+                                    </p>
+                                    <p className="text-xs text-slate-400 font-mono mt-0.5 truncate">
+                                      {product.skuBase}
+                                    </p>
                                     {latest.sapCode && (
-                                      <p className="text-[11px] text-slate-500 mt-0.5">SAP {latest.sapCode}</p>
+                                      <p className="text-[11px] text-slate-500 mt-0.5 truncate">
+                                        SAP {latest.sapCode}
+                                      </p>
                                     )}
                                   </td>
                                   <td className="px-5 py-4">
@@ -325,7 +343,7 @@ const Library = () => {
                                   </td>
                                   <td className="px-5 py-4">
                                     <span className="inline-flex items-center gap-1.5 text-slate-600">
-                                      <History size={14} className="text-slate-400" />
+                                      <History size={14} className="text-slate-400 shrink-0" />
                                       {product.versionCount}
                                       {product.versionCount > 1 && (
                                         <span className="text-xs text-slate-400">
@@ -335,7 +353,9 @@ const Library = () => {
                                     </span>
                                   </td>
                                   <td className="px-5 py-4 text-right">
-                                    <span className="text-xs font-medium text-accent">Ver historial →</span>
+                                    <span className="text-xs font-medium text-accent whitespace-nowrap">
+                                      Ver historial →
+                                    </span>
                                   </td>
                                 </tr>
                               );

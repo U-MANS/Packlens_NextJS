@@ -121,7 +121,7 @@ export const UploadDesignModal: React.FC<UploadDesignModalProps> = ({
   const nextPhaseLabel = isDesarrollo
     ? isAvFlow
       ? 'Aprobación Marketing'
-      : 'Validación diseño'
+      : 'Validación diseño y Aprobación Legal (en paralelo)'
     : isAvFlow
       ? 'Aprobación Marketing'
       : 'Aprobación Diseño';

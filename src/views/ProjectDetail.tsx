@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, NavLink, Routes, Route, Navigate } from 'react-router-dom';
-import { ArrowLeft, Edit3, Image as ImageIcon, Pencil, Upload, Hash } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Edit3, Image as ImageIcon, Pencil, Upload, Hash } from 'lucide-react';
 
 import { useAppStore } from '../store/useAppStore';
 import { StatusBadge } from '../components/ui/Badge';
@@ -23,6 +23,10 @@ const LIFECYCLE_STYLES: Record<LifecycleStatus, string> = {
   Vigente:         'bg-emerald-50 text-emerald-700 border-emerald-200',
   Temporal:        'bg-blue-50 text-blue-700 border-blue-200',
   Obsoleta:        'bg-red-50 text-red-600 border-red-200',
+  'En proceso de cambio':
+    'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-500/15 dark:text-orange-300 dark:border-orange-500/35',
+  Sustituido:
+    'bg-slate-200 text-slate-600 border-slate-300 dark:bg-slate-500/25 dark:text-slate-300 dark:border-slate-500/40',
 };
 
 const LifecycleBadge = ({ status }: { status: LifecycleStatus | undefined }) => {
@@ -45,8 +49,20 @@ import { TabHoras } from './tabs/TabHoras';
 const ProjectDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { projects, designProposals, updateProject, loadProjectDetail, activeRole } = useAppStore();
+  const { projects, designProposals, updateProject, loadProjectDetail, refreshProjects, activeRole } =
+    useAppStore();
   const project = projects.find((p) => p.id === id);
+  const nextVersion = useMemo(
+    () => (id ? projects.find((p) => p.previousVersionId === id) : undefined),
+    [projects, id],
+  );
+  const previousVersion = useMemo(
+    () =>
+      project?.previousVersionId
+        ? projects.find((p) => p.id === project.previousVersionId)
+        : undefined,
+    [projects, project?.previousVersionId],
+  );
 
   const [uploadOpen, setUploadOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -91,8 +107,10 @@ const ProjectDetail = () => {
   useEffect(() => {
     if (!id) return;
     setDetailLoading(true);
-    void loadProjectDetail(id).finally(() => setDetailLoading(false));
-  }, [id, loadProjectDetail]);
+    void Promise.all([loadProjectDetail(id), refreshProjects()]).finally(() =>
+      setDetailLoading(false),
+    );
+  }, [id, loadProjectDetail, refreshProjects]);
 
   // Refresca el detalle mientras un agente revisa la fase.
   useEffect(() => {
@@ -201,13 +219,63 @@ const ProjectDetail = () => {
               project.regulatoryContact ? (
                 <>
                   <span className="mx-2 text-slate-300">•</span>
-                  Regulatory:{' '}
+                  I+D:{' '}
                   {project.regulatoryAssigneeType === 'agent' && project.regulatoryAgentName
                     ? `${project.regulatoryAgentName} (Agente)`
                     : project.regulatoryContact}
                 </>
               ) : null}
             </p>
+
+            {nextVersion &&
+              (project.lifecycleStatus === 'En proceso de cambio' ||
+                project.lifecycleStatus === 'Sustituido') && (
+                <button
+                  type="button"
+                  onClick={() => navigate(`/projects/${nextVersion.id}`)}
+                  className="mt-3 flex items-start gap-3 w-full max-w-xl text-left rounded-lg border border-orange-200 dark:border-orange-500/35 bg-orange-50/80 dark:bg-orange-500/10 px-3.5 py-2.5 hover:bg-orange-50 dark:hover:bg-orange-500/15 transition-colors cursor-pointer"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-orange-700 dark:text-orange-300">
+                      {project.lifecycleStatus === 'Sustituido'
+                        ? 'Sustituido por la nueva versión'
+                        : 'Nueva versión en curso'}
+                    </p>
+                    <p className="text-sm font-medium text-primary truncate mt-0.5">
+                      {nextVersion.name}{' '}
+                      <span className="font-mono text-xs text-slate-500">
+                        {nextVersion.sku} · v{nextVersion.version ?? '?'}
+                      </span>
+                    </p>
+                  </div>
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-orange-700 dark:text-orange-300 shrink-0 mt-0.5">
+                    Ir a la ficha <ArrowRight size={14} />
+                  </span>
+                </button>
+              )}
+
+            {previousVersion && (
+              <button
+                type="button"
+                onClick={() => navigate(`/projects/${previousVersion.id}`)}
+                className="mt-3 flex items-start gap-3 w-full max-w-xl text-left rounded-lg border border-border bg-secondary/60 px-3.5 py-2.5 hover:bg-secondary transition-colors cursor-pointer"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Versión anterior
+                  </p>
+                  <p className="text-sm font-medium text-primary truncate mt-0.5">
+                    {previousVersion.name}{' '}
+                    <span className="font-mono text-xs text-slate-500">
+                      {previousVersion.sku} · v{previousVersion.version ?? '?'}
+                    </span>
+                  </p>
+                </div>
+                <span className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 dark:text-slate-300 shrink-0 mt-0.5">
+                  Ver anterior <ArrowRight size={14} />
+                </span>
+              </button>
+            )}
 
             {project.agentReviewRunning && (
               <div className="mt-3 inline-flex items-center gap-2 text-xs font-medium text-violet-800 bg-violet-50 border border-violet-200 px-3 py-1.5 rounded-md">

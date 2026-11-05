@@ -1,6 +1,14 @@
 import type { DbUser } from '@/lib/server/auth';
 import { isDesignUploadPhase, isReviewPhase } from '@/lib/server/phase';
 
+/** Roles de usuario gestionables por Admin. */
+export const USER_ROLES = ['Marketing', 'Diseño', 'I+D', 'Comercial', 'Admin'] as const;
+export type UserRoleName = (typeof USER_ROLES)[number];
+
+export function isValidUserRole(role: string): role is UserRoleName {
+  return (USER_ROLES as readonly string[]).includes(role);
+}
+
 export function canManageUsers(user: DbUser): boolean {
   return user.role === 'Admin';
 }

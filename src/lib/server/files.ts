@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import path from 'path';
 import { env } from '@/lib/env';
 import { getAdminClient } from '@/lib/supabase/admin';
+import { isPublicWorkflowFile } from '@/utils/fileAccess';
 
 function detectFlags(mimeType: string, fileName: string) {
   const mime = mimeType || '';
@@ -180,15 +181,33 @@ export async function createAttachmentFromMeta(payload: {
 }
 
 export async function attachmentToRead(att: AttachmentRow) {
+  const proxy = proxyDownloadUrl(att.storage_key, att.file_name);
+  const publicFile = isPublicWorkflowFile({
+    mimeType: att.mime_type,
+    fileName: att.file_name,
+    isImage: att.is_image,
+    isPdf: att.is_pdf,
+  });
+
+  // Archivos restringidos (no PDF/imagen) siempre por proxy autenticado,
+  // para poder aplicar el control de rol en /api/v1/files.
+  if (!publicFile) {
+    return {
+      ...att,
+      preview_url: proxy,
+      download_url: proxy,
+    };
+  }
+
   let preview_url: string | null = null;
   try {
     preview_url = await getSignedDownloadUrl(att.storage_key);
   } catch {
-    preview_url = proxyDownloadUrl(att.storage_key, att.file_name);
+    preview_url = proxy;
   }
   return {
     ...att,
     preview_url,
-    download_url: proxyDownloadUrl(att.storage_key, att.file_name),
+    download_url: proxy,
   };
 }

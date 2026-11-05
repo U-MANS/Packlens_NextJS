@@ -66,6 +66,8 @@ interface AppState {
 
   setActiveRole: (role: Role) => void;
   bootstrap: () => Promise<void>;
+  /** Recarga solo el listado de proyectos (p. ej. al entrar en /projects). */
+  refreshProjects: () => Promise<void>;
   loadProjectDetail: (projectId: string) => Promise<void>;
 
   addProject: (payload: api.ProjectCreatePayload, briefingFiles?: File[]) => Promise<string>;
@@ -84,8 +86,8 @@ interface AppState {
     files: File[],
   ) => Promise<void>;
 
-  approveCurrentPhase: (projectId: string, comment?: string) => Promise<void>;
-  rejectCurrentPhase: (projectId: string, comment: string) => Promise<void>;
+  approveCurrentPhase: (projectId: string, comment?: string, phase?: string) => Promise<void>;
+  rejectCurrentPhase: (projectId: string, comment: string, phase?: string) => Promise<void>;
   commentOnPhase: (projectId: string, comment: string) => Promise<void>;
 
   addImageAnnotation: (
@@ -181,6 +183,15 @@ export const useAppStore = create<AppState>()((set, get) => ({
       const message = getErrorMessage(e, 'Error cargando datos');
       toast.error(message);
       set({ loadError: message, isLoading: false });
+    }
+  },
+
+  refreshProjects: async () => {
+    try {
+      const projectsRaw = await api.listProjects({ archived: 'false' });
+      set({ projects: projectsRaw.map(mapProject) });
+    } catch (e) {
+      toast.error(getErrorMessage(e, 'Error actualizando proyectos'));
     }
   },
 
@@ -303,16 +314,29 @@ export const useAppStore = create<AppState>()((set, get) => ({
       if (project) showPhaseToast(project.phase);
     }, 'Error al subir la propuesta'),
 
-  approveCurrentPhase: async (projectId, comment) =>
+  approveCurrentPhase: async (projectId, comment, phase) =>
     runApi(async () => {
-      const updated = await api.approvePhase(projectId, comment);
+      const updated = await api.approvePhase(projectId, comment, phase);
       await get().loadProjectDetail(projectId);
-      showPhaseToast(updated.phase);
+      if (
+        phase &&
+        (phase === 'Validación diseño' || phase === 'Aprobación Legal') &&
+        (updated.phase === 'Validación diseño' || updated.phase === 'Aprobación Legal')
+      ) {
+        const pending =
+          updated.phase === 'Validación diseño' ? 'Validación diseño' : 'Aprobación Legal';
+        toast.show(`«${phase}» aprobada — pendiente «${pending}»`, {
+          department: 'Marketing e I+D',
+          type: 'info',
+        });
+      } else {
+        showPhaseToast(updated.phase);
+      }
     }, 'Error al aprobar la fase'),
 
-  rejectCurrentPhase: async (projectId, comment) =>
+  rejectCurrentPhase: async (projectId, comment, phase) =>
     runApi(async () => {
-      await api.rejectPhase(projectId, comment);
+      await api.rejectPhase(projectId, comment, phase);
       await get().loadProjectDetail(projectId);
       const project = get().projects.find((p) => p.id === projectId);
       if (project) {

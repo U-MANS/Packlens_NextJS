@@ -168,6 +168,15 @@ export async function POST(request: NextRequest, context: Ctx) {
       actorId: user.id,
       actorName: user.name,
     });
+    // Gate paralelo: avisar también a I+D (Aprobación Legal) al entrar en Validación.
+    if (enteredPhase === 'Validación diseño' && flowType !== 'Campaña audiovisual') {
+      schedulePhaseEntered({
+        project,
+        toPhase: 'Aprobación Legal',
+        actorId: user.id,
+        actorName: user.name,
+      });
+    }
   }
 
   return jsonOk(await proposalToRead(proposal.id), { status: 201 });

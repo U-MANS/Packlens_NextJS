@@ -3,7 +3,7 @@ import { getAdminClient } from '@/lib/supabase/admin';
 import type { DbUser } from '@/lib/server/auth';
 import { getSignedDownloadUrl } from '@/lib/server/files';
 import { getAgent, type DbAgent } from '@/lib/server/agents';
-import { isReviewPhase } from '@/lib/server/phase';
+import { isReviewPhase, isInParallelGate } from '@/lib/server/phase';
 import { approvePhase, rejectPhase, addActivity, getProjectRow } from '@/lib/server/workflow';
 
 const AGENT_PHASE_ROLE: Record<string, 'Marketing' | 'I+D'> = {
@@ -203,20 +203,25 @@ async function logAgentReview(payload: {
 }
 
 /**
- * Si la fase actual del proyecto corresponde a un agente activo, lo ejecuta.
- * No lanza: errores se registran en activity / agent_reviews.
+ * Ejecuta el agente asignado a una vía/fase concreta.
+ * `trackPhase` permite revisar Aprobación Legal aunque el proyecto ancle en Validación.
  */
-export async function maybeRunPhaseAgent(projectId: string): Promise<void> {
+async function runAgentForTrack(projectId: string, trackPhase: string): Promise<void> {
   const project = await getProjectRow(projectId);
   if (!project) return;
 
-  const phase = project.phase as string;
-  if (!isReviewPhase(phase) || phase === 'Aprobación final') return;
+  const projectPhase = project.phase as string;
+  const flowType = (project.flow_type as string | null) ?? null;
+  if (!isReviewPhase(projectPhase) || projectPhase === 'Aprobación final') return;
 
-  const agent = await resolveAgentForPhase(project as Record<string, unknown>, phase);
+  // Si ya salimos del gate (p. ej. el otro agente rechazó), no seguir.
+  if (isInParallelGate(trackPhase, flowType) && !isInParallelGate(projectPhase, flowType)) {
+    return;
+  }
+
+  const agent = await resolveAgentForPhase(project as Record<string, unknown>, trackPhase);
   if (!agent) return;
 
-  // Evitar bucles si ya hay una revisión en curso
   if (project.agent_review_running) return;
 
   await setReviewRunning(projectId, true);
@@ -228,7 +233,7 @@ export async function maybeRunPhaseAgent(projectId: string): Promise<void> {
         projectId,
         ownerId,
         'AGENT_REVIEW_STARTED',
-        `Agente «${agent.name}» revisando fase ${phase}`,
+        `Agente «${agent.name}» revisando fase ${trackPhase}`,
       );
     }
 
@@ -242,7 +247,7 @@ export async function maybeRunPhaseAgent(projectId: string): Promise<void> {
       await logAgentReview({
         projectId,
         agentId: agent.id,
-        phase,
+        phase: trackPhase,
         decision: 'error',
         comment: 'Respuesta JSON inválida',
         raw,
@@ -252,7 +257,7 @@ export async function maybeRunPhaseAgent(projectId: string): Promise<void> {
           projectId,
           ownerId,
           'AGENT_REVIEW_ERROR',
-          `Agente «${agent.name}» no devolvió un JSON válido. La fase permanece en ${phase}.`,
+          `Agente «${agent.name}» no devolvió un JSON válido. La fase permanece en ${projectPhase}.`,
         );
       }
       return;
@@ -260,20 +265,19 @@ export async function maybeRunPhaseAgent(projectId: string): Promise<void> {
 
     const proxy = await resolveProxyActor(project as Record<string, unknown>, agent);
     const comment = `[Agente · ${agent.name}] ${parsed.comment}`;
+    const opts = {
+      skipAgentTrigger: true,
+      agentId: agent.id,
+      trackPhase,
+    };
 
     if (parsed.decision === 'approve') {
-      const result = await approvePhase(projectId, proxy, comment, {
-        skipAgentTrigger: true,
-        agentId: agent.id,
-      });
+      const result = await approvePhase(projectId, proxy, comment, opts);
       if ('error' in result && result.error) {
         throw new Error(result.error);
       }
     } else {
-      const result = await rejectPhase(projectId, proxy, comment, {
-        skipAgentTrigger: true,
-        agentId: agent.id,
-      });
+      const result = await rejectPhase(projectId, proxy, comment, opts);
       if ('error' in result && result.error) {
         throw new Error(result.error);
       }
@@ -282,7 +286,7 @@ export async function maybeRunPhaseAgent(projectId: string): Promise<void> {
     await logAgentReview({
       projectId,
       agentId: agent.id,
-      phase,
+      phase: trackPhase,
       decision: parsed.decision,
       comment: parsed.comment,
       raw,
@@ -292,7 +296,7 @@ export async function maybeRunPhaseAgent(projectId: string): Promise<void> {
     await logAgentReview({
       projectId,
       agentId: agent.id,
-      phase,
+      phase: trackPhase,
       decision: 'error',
       comment: msg,
       raw: raw || null,
@@ -303,12 +307,37 @@ export async function maybeRunPhaseAgent(projectId: string): Promise<void> {
         projectId,
         ownerId,
         'AGENT_REVIEW_ERROR',
-        `Agente «${agent.name}» falló: ${msg}. La fase permanece en ${phase}.`,
+        `Agente «${agent.name}» falló: ${msg}. La fase permanece en ${projectPhase}.`,
       );
     }
   } finally {
     await setReviewRunning(projectId, false);
   }
+}
+
+/**
+ * Si la fase actual del proyecto corresponde a un agente activo, lo ejecuta.
+ * En el gate paralelo lanza Marketing y luego I+D (si el proyecto sigue en el gate).
+ */
+export async function maybeRunPhaseAgent(projectId: string): Promise<void> {
+  const project = await getProjectRow(projectId);
+  if (!project) return;
+
+  const phase = project.phase as string;
+  const flowType = (project.flow_type as string | null) ?? null;
+  if (!isReviewPhase(phase) || phase === 'Aprobación final') return;
+
+  if (isInParallelGate(phase, flowType)) {
+    // Orden fijo para el flag agent_review_running; los humanos pueden ir en cualquier orden.
+    await runAgentForTrack(projectId, 'Validación diseño');
+    const after = await getProjectRow(projectId);
+    if (after && isInParallelGate(after.phase as string, flowType)) {
+      await runAgentForTrack(projectId, 'Aprobación Legal');
+    }
+    return;
+  }
+
+  await runAgentForTrack(projectId, phase);
 }
 
 /** Disparo no bloqueante tras entrar en fase de revisión. */

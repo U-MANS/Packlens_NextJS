@@ -11,6 +11,24 @@ export const PHASE_ORDER: ProjectPhase[] = [
   'Aprobado',
 ];
 
+/** Validación diseño + Aprobación Legal se revisan en paralelo (flujo packaging). */
+export const PARALLEL_REVIEW_PHASES: ProjectPhase[] = [
+  'Validación diseño',
+  'Aprobación Legal',
+];
+
+export function isParallelReviewPhase(phase: ProjectPhase | string): boolean {
+  return PARALLEL_REVIEW_PHASES.includes(phase as ProjectPhase);
+}
+
+export function isInParallelGate(
+  phase: ProjectPhase | string,
+  flowType?: string | null,
+): boolean {
+  if (isAudiovisualFlow(flowType)) return false;
+  return isParallelReviewPhase(phase);
+}
+
 /** Pipeline de Campaña audiovisual (reutiliza nombres internos de fase). */
 export const AV_PHASE_ORDER: ProjectPhase[] = [
   'Creación Desarrollo',
@@ -79,8 +97,46 @@ export const rejectionSourcePhase = (
 };
 
 /**
+ * Inicio del ciclo del gate paralelo: última subida de desarrollo
+ * (o, si no hay, última aprobación de Aprobación Diseño).
+ */
+export function getParallelCycleStart(
+  actions: PhaseAction[],
+  projectId: string,
+  latestDesarrolloCreatedAt?: string,
+): string | undefined {
+  return (
+    latestDesarrolloCreatedAt ??
+    actions
+      .filter(
+        (a) =>
+          a.projectId === projectId &&
+          a.phase === 'Aprobación Diseño' &&
+          a.type === 'approve',
+      )
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]?.createdAt
+  );
+}
+
+/** ¿Hay aprobación de esta vía en el ciclo paralelo actual? */
+export function hasParallelTrackApproval(
+  actions: PhaseAction[],
+  projectId: string,
+  track: ProjectPhase,
+  cycleStart?: string,
+): boolean {
+  return actions.some(
+    (a) =>
+      a.projectId === projectId &&
+      a.phase === track &&
+      a.type === 'approve' &&
+      (!cycleStart || a.createdAt >= cycleStart),
+  );
+}
+
+/**
  * Último rechazo de la fase siguiente que devolvió el proyecto a `selectedPhase`.
- * Ej.: en Validación diseño → rechazo registrado en Aprobación Legal.
+ * En el gate paralelo, ambas vías rechazan a Creación Desarrollo (no entre sí).
  */
 export function getLatestIncomingRejection(
   actions: PhaseAction[],
@@ -88,8 +144,26 @@ export function getLatestIncomingRejection(
   projectId: string,
   flowType?: string | null,
 ): PhaseAction | undefined {
+  if (selectedPhase === 'Creación Desarrollo' && !isAudiovisualFlow(flowType)) {
+    return actions
+      .filter(
+        (a) =>
+          a.projectId === projectId &&
+          a.type === 'reject' &&
+          isParallelReviewPhase(a.phase),
+      )
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+  }
   const source = rejectionSourcePhase(selectedPhase, flowType);
   if (!source) return undefined;
+  // Evitar el vínculo secuencial Legal → Validación (ya no aplica).
+  if (
+    selectedPhase === 'Validación diseño' &&
+    source === 'Aprobación Legal' &&
+    !isAudiovisualFlow(flowType)
+  ) {
+    return undefined;
+  }
   return actions
     .filter(
       (a) =>
@@ -250,7 +324,9 @@ export function isPhaseOwnedByRole(role: string, phase: ProjectPhase): boolean {
     );
   }
   if (role === 'I+D') {
-    return phase === 'Aprobación Legal';
+    // Gate paralelo: el proyecto ancla en Validación hasta que Marketing aprueba
+    // (entonces pasa a Aprobación Legal) o ambas quedan hechas.
+    return phase === 'Aprobación Legal' || phase === 'Validación diseño';
   }
   return false;
 }
@@ -295,15 +371,15 @@ export const PHASE_TOAST: Record<string, { msg: string; dept: string }> = {
     dept: 'Equipo de Diseño',
   },
   'Validación diseño': {
-    msg: 'Archivo de desarrollo enviado a Validación de Diseño',
-    dept: 'Equipo de Marketing',
+    msg: 'Archivo de desarrollo enviado a Validación y Aprobación Legal (en paralelo)',
+    dept: 'Marketing e I+D',
   },
   'Aprobación Legal': {
-    msg: 'Validación de diseño aprobada — enviado a Aprobación Legal',
+    msg: 'Pendiente de Aprobación Legal',
     dept: 'Departamento Legal (I+D)',
   },
   'Arte final': {
-    msg: 'Revisión legal aprobada — subir Arte Final',
+    msg: 'Validación y Legal aprobados — subir Arte Final',
     dept: 'Equipo de Diseño',
   },
   'Aprobación final': {

@@ -37,8 +37,10 @@ const LIFECYCLE_RANK: Record<LifecycleStatus, number> = {
   Vigente: 0,
   Temporal: 1,
   'Pendiente SAP': 2,
-  Borrador: 3,
-  Obsoleta: 4,
+  'En proceso de cambio': 3,
+  Borrador: 4,
+  Sustituido: 5,
+  Obsoleta: 6,
 };
 
 function compareLifecycle(a: LifecycleStatus | undefined, b: LifecycleStatus | undefined): number {
@@ -176,7 +178,9 @@ export const LIBRARY_LIFECYCLE_STATUSES: LifecycleStatus[] = [
   'Vigente',
   'Temporal',
   'Pendiente SAP',
+  'En proceso de cambio',
   'Borrador',
+  'Sustituido',
   'Obsoleta',
 ];
 

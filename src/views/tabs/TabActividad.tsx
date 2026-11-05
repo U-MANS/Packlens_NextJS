@@ -1,6 +1,8 @@
 import { useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Activity,
+  ArrowRight,
   CheckCircle2,
   CheckSquare,
   ChevronDown,
@@ -32,16 +34,17 @@ import type {
 import { formatDateTime as formatDate } from '../../utils/dates';
 
 const ROLES_COLORS: Record<string, string> = {
-  Marketing: 'bg-blue-100 text-blue-700',
-  Diseño: 'bg-purple-100 text-purple-700',
-  Calidad: 'bg-amber-100 text-amber-700',
-  Legal: 'bg-red-100 text-red-700',
-  Impresión: 'bg-cyan-100 text-cyan-700',
-  Admin: 'bg-emerald-100 text-emerald-700',
+  Marketing: 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300',
+  Diseño: 'bg-purple-100 text-purple-700 dark:bg-violet-500/20 dark:text-violet-300',
+  Calidad: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300',
+  Legal: 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300',
+  Impresión: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-500/20 dark:text-cyan-300',
+  Admin: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300',
+  'I+D': 'bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300',
 };
 
 const roleColor = (role: string) =>
-  ROLES_COLORS[role] ?? 'bg-slate-100 text-slate-600';
+  ROLES_COLORS[role] ?? 'bg-slate-100 text-slate-600 dark:bg-slate-500/20 dark:text-slate-300';
 
 type EventConfig = {
   icon: React.ReactNode;
@@ -56,71 +59,74 @@ const getEventConfig = (type: ActivityEvent['type']): EventConfig => {
       return {
         icon: <Sparkles size={15} />,
         dotClass: 'bg-accent border-accent/30 text-white',
-        cardClass: 'border-accent/20 bg-accent/5',
+        cardClass: 'border-accent/20 bg-accent/5 dark:border-accent/30 dark:bg-accent/10',
         labelClass: 'text-accent',
       };
     case 'NEW_VERSION':
       return {
         icon: <Upload size={15} />,
-        dotClass: 'bg-purple-500 border-purple-200 text-white',
-        cardClass: 'border-purple-200 bg-purple-50/50',
-        labelClass: 'text-purple-700',
+        dotClass: 'bg-purple-500 border-purple-400/40 text-white',
+        cardClass:
+          'border-purple-200 bg-purple-50/50 dark:border-violet-500/35 dark:bg-violet-500/10',
+        labelClass: 'text-purple-700 dark:text-violet-300',
       };
     case 'DOCUMENT_UPLOADED':
       return {
         icon: <FileText size={15} />,
-        dotClass: 'bg-blue-500 border-blue-200 text-white',
-        cardClass: 'border-blue-100 bg-blue-50/40',
-        labelClass: 'text-blue-700',
+        dotClass: 'bg-blue-500 border-blue-400/40 text-white',
+        cardClass: 'border-blue-100 bg-blue-50/40 dark:border-blue-500/35 dark:bg-blue-500/10',
+        labelClass: 'text-blue-700 dark:text-blue-300',
       };
     case 'REVIEW_APPROVED':
       return {
         icon: <ThumbsUp size={15} />,
-        dotClass: 'bg-emerald-500 border-emerald-200 text-white',
-        cardClass: 'border-emerald-200 bg-emerald-50/60',
-        labelClass: 'text-emerald-700',
+        dotClass: 'bg-emerald-500 border-emerald-400/40 text-white',
+        cardClass:
+          'border-emerald-200 bg-emerald-50/60 dark:border-emerald-500/35 dark:bg-emerald-500/10',
+        labelClass: 'text-emerald-700 dark:text-emerald-300',
       };
     case 'REVIEW_REJECTED':
       return {
         icon: <XCircle size={15} />,
-        dotClass: 'bg-red-500 border-red-200 text-white',
-        cardClass: 'border-red-200 bg-red-50/60',
-        labelClass: 'text-red-700',
+        dotClass: 'bg-red-500 border-red-400/40 text-white',
+        cardClass: 'border-red-200 bg-red-50/60 dark:border-red-500/35 dark:bg-red-500/10',
+        labelClass: 'text-red-700 dark:text-red-300',
       };
     case 'COMMENT_ADDED':
       return {
         icon: <MessageSquare size={15} />,
-        dotClass: 'bg-slate-400 border-slate-200 text-white',
-        cardClass: 'border-slate-200 bg-white',
-        labelClass: 'text-slate-600',
+        dotClass: 'bg-slate-400 border-slate-300 text-white',
+        cardClass: 'border-slate-200 bg-white dark:border-border dark:bg-surface',
+        labelClass: 'text-slate-600 dark:text-slate-300',
       };
     case 'PHASE_CHANGED':
       return {
         icon: <CheckCircle2 size={15} />,
-        dotClass: 'bg-amber-500 border-amber-200 text-white',
-        cardClass: 'border-amber-100 bg-amber-50/40',
-        labelClass: 'text-amber-700',
+        dotClass: 'bg-amber-500 border-amber-400/40 text-white',
+        cardClass: 'border-amber-100 bg-amber-50/40 dark:border-amber-500/35 dark:bg-amber-500/10',
+        labelClass: 'text-amber-700 dark:text-amber-300',
       };
     case 'SAP_CODE_ASSIGNED':
       return {
         icon: <Hash size={15} />,
-        dotClass: 'bg-indigo-500 border-indigo-200 text-white',
-        cardClass: 'border-indigo-200 bg-indigo-50/50',
-        labelClass: 'text-indigo-700',
+        dotClass: 'bg-indigo-500 border-indigo-400/40 text-white',
+        cardClass:
+          'border-indigo-200 bg-indigo-50/50 dark:border-indigo-500/35 dark:bg-indigo-500/10',
+        labelClass: 'text-indigo-700 dark:text-indigo-300',
       };
     case 'TASK_COMPLETED':
       return {
         icon: <CheckSquare size={15} />,
-        dotClass: 'bg-teal-500 border-teal-200 text-white',
-        cardClass: 'border-teal-100 bg-teal-50/40',
-        labelClass: 'text-teal-700',
+        dotClass: 'bg-teal-500 border-teal-400/40 text-white',
+        cardClass: 'border-teal-100 bg-teal-50/40 dark:border-teal-500/35 dark:bg-teal-500/10',
+        labelClass: 'text-teal-700 dark:text-teal-300',
       };
     default:
       return {
         icon: <Activity size={15} />,
         dotClass: 'bg-slate-300 border-slate-200 text-white',
-        cardClass: 'border-border bg-white',
-        labelClass: 'text-slate-600',
+        cardClass: 'border-border bg-white dark:bg-surface',
+        labelClass: 'text-slate-600 dark:text-slate-300',
       };
   }
 };
@@ -217,6 +223,9 @@ interface EventCardProps {
   phaseAction?: PhaseAction;
   replies: ActivityReply[];
   onReply: (text: string) => void | Promise<void>;
+  /** Proyecto del que se partió (para enlazar desde NEW_VERSION). */
+  previousVersionId?: string;
+  previousVersionSku?: string;
   /** Si hay imagen anotable para este evento, estos datos se proporcionan. */
   annotationContext?: {
     proposal: DesignProposal;
@@ -230,8 +239,11 @@ const EventCard: React.FC<EventCardProps> = ({
   phaseAction,
   replies,
   onReply,
+  previousVersionId,
+  previousVersionSku,
   annotationContext,
 }) => {
+  const navigate = useNavigate();
   const cfg = getEventConfig(event.type);
   const [replyOpen, setReplyOpen] = useState(false);
   const [showReplies, setShowReplies] = useState(true);
@@ -283,14 +295,30 @@ const EventCard: React.FC<EventCardProps> = ({
             {/* Event headline */}
             <p className="text-sm font-medium text-primary">{event.text}</p>
 
+            {event.type === 'NEW_VERSION' && previousVersionId && (
+              <button
+                type="button"
+                onClick={() => navigate(`/projects/${previousVersionId}/activity`)}
+                className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-purple-700 dark:text-violet-300 hover:text-purple-900 dark:hover:text-violet-200 transition-colors cursor-pointer"
+              >
+                Ver actividad de la versión anterior
+                {previousVersionSku ? (
+                  <span className="font-mono font-medium opacity-80">({previousVersionSku})</span>
+                ) : null}
+                <ArrowRight size={13} />
+              </button>
+            )}
+
             {/* PhaseAction comment bubble */}
             {phaseAction?.comment && (
-              <div className="mt-2.5 bg-white/70 rounded-lg border border-white px-3 py-2.5">
+              <div className="mt-2.5 bg-white/70 dark:bg-surface/70 rounded-lg border border-white dark:border-border px-3 py-2.5">
                 <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-slate-400 font-semibold mb-1.5">
                   <MessageCircle size={11} />
                   Mensaje
                 </div>
-                <p className="text-sm text-slate-800 leading-relaxed">{phaseAction.comment}</p>
+                <p className="text-sm text-slate-800 dark:text-slate-200 leading-relaxed">
+                  {phaseAction.comment}
+                </p>
               </div>
             )}
 
@@ -324,7 +352,7 @@ const EventCard: React.FC<EventCardProps> = ({
             {showReplies && <ReplyThread replies={replies} />}
 
             {/* Reply toggle */}
-            <div className="mt-3 border-t border-black/5 pt-2.5">
+            <div className="mt-3 border-t border-black/5 dark:border-white/10 pt-2.5">
               {replyOpen ? (
                 <div>
                   <ReplyBox
@@ -336,7 +364,7 @@ const EventCard: React.FC<EventCardProps> = ({
                   />
                   <button
                     onClick={() => setReplyOpen(false)}
-                    className="mt-1.5 text-[11px] text-slate-400 hover:text-slate-600"
+                    className="mt-1.5 text-[11px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                   >
                     Cancelar
                   </button>
@@ -345,7 +373,7 @@ const EventCard: React.FC<EventCardProps> = ({
                 <button
                   type="button"
                   onClick={() => setReplyOpen(true)}
-                  className="flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-accent font-medium transition-colors"
+                  className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400 hover:text-accent font-medium transition-colors"
                 >
                   <CornerDownRight size={12} /> Responder
                 </button>
@@ -372,12 +400,18 @@ const EventCard: React.FC<EventCardProps> = ({
 
 export const TabActividad = ({ projectId }: { projectId: string }) => {
   const {
+    projects,
     activity,
     phaseActions,
     activityReplies,
     designProposals,
     addActivityReply,
   } = useAppStore();
+
+  const project = projects.find((p) => p.id === projectId);
+  const previousVersion = project?.previousVersionId
+    ? projects.find((p) => p.id === project.previousVersionId)
+    : undefined;
 
   const projectEvents = activity
     .filter((a) => a.projectId === projectId)
@@ -436,6 +470,8 @@ export const TabActividad = ({ projectId }: { projectId: string }) => {
                     phaseAction={phaseAction}
                     replies={replies}
                     onReply={(text) => addActivityReply(event.id, projectId, text)}
+                    previousVersionId={project?.previousVersionId}
+                    previousVersionSku={previousVersion?.sku}
                     annotationContext={annotationContext}
                   />
                 );

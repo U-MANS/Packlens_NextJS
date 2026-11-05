@@ -5,6 +5,7 @@ import { createAttachmentFromFile, getSignedDownloadUrl, proxyDownloadUrl } from
 import { canManageBriefing } from '@/lib/server/permissions';
 import { getProjectRow } from '@/lib/server/workflow';
 import { getAdminClient } from '@/lib/supabase/admin';
+import { isPublicWorkflowFile } from '@/utils/fileAccess';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -29,11 +30,20 @@ export async function POST(request: NextRequest, context: Ctx) {
 
   for (const file of files) {
     const att = await createAttachmentFromFile(file, `projects/${id}/briefing`);
-    let preview_url: string | null = null;
-    try {
-      preview_url = await getSignedDownloadUrl(att.storage_key);
-    } catch {
-      preview_url = proxyDownloadUrl(att.storage_key, att.file_name);
+    const proxy = proxyDownloadUrl(att.storage_key, att.file_name);
+    const publicFile = isPublicWorkflowFile({
+      mimeType: att.mime_type,
+      fileName: att.file_name,
+      isImage: att.is_image,
+      isPdf: att.is_pdf,
+    });
+    let preview_url: string | null = proxy;
+    if (publicFile) {
+      try {
+        preview_url = await getSignedDownloadUrl(att.storage_key);
+      } catch {
+        preview_url = proxy;
+      }
     }
     (briefing.files as unknown[]).push({
       id: att.id,
@@ -43,7 +53,7 @@ export async function POST(request: NextRequest, context: Ctx) {
       storage_key: att.storage_key,
       uploaded_at: new Date().toISOString(),
       preview_url,
-      download_url: proxyDownloadUrl(att.storage_key, att.file_name),
+      download_url: proxy,
     });
   }
 

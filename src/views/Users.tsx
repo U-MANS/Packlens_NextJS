@@ -94,6 +94,126 @@ function getPresence(user: AppUser, currentUserId?: string): 'Activo' | 'Ausente
   return user.id === currentUserId ? 'Activo' : 'Ausente';
 }
 
+function useAnchoredMenu(anchorEl: HTMLElement | null, onClose: () => void) {
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [style, setStyle] = useState<React.CSSProperties>({ visibility: 'hidden' });
+
+  useLayoutEffect(() => {
+    if (!anchorEl || !menuRef.current) return;
+    const rect = anchorEl.getBoundingClientRect();
+    const menuRect = menuRef.current.getBoundingClientRect();
+    const gap = 8;
+    let top = rect.bottom + gap;
+    if (top + menuRect.height > window.innerHeight - gap) {
+      top = rect.top - menuRect.height - gap;
+    }
+    const left = Math.min(
+      Math.max(8, rect.left),
+      window.innerWidth - menuRect.width - 8,
+    );
+    setStyle({ position: 'fixed', top, left, zIndex: 9999 });
+  }, [anchorEl]);
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (
+        menuRef.current &&
+        !menuRef.current.contains(e.target as Node) &&
+        anchorEl &&
+        !anchorEl.contains(e.target as Node)
+      ) {
+        onClose();
+      }
+    };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('mousedown', handleClick);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [onClose, anchorEl]);
+
+  return { menuRef, style };
+}
+
+interface RoleSelectProps {
+  user: AppUser;
+  disabled?: boolean;
+  onChange: (role: Dept) => void;
+}
+
+function RoleSelect({ user, disabled, onChange }: RoleSelectProps) {
+  const [open, setOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const { menuRef, style } = useAnchoredMenu(open ? buttonRef.current : null, () => setOpen(false));
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={`Rol de ${user.name}`}
+        title="Cambiar rol"
+        onClick={() => setOpen((v) => !v)}
+        className={`inline-flex items-center gap-1.5 pl-2.5 pr-2 py-1 rounded-full border text-xs font-semibold transition-colors disabled:opacity-60 disabled:cursor-wait ${
+          DEPT_COLORS[user.role]
+        } ${open ? 'ring-2 ring-accent/30' : 'hover:brightness-95 dark:hover:brightness-110'}`}
+      >
+        {user.role === 'Admin' && <Shield size={11} />}
+        {user.role}
+        <UserCog size={12} className="opacity-60" />
+      </button>
+      {open &&
+        createPortal(
+          <div
+            ref={menuRef}
+            style={style}
+            role="listbox"
+            aria-label="Seleccionar rol"
+            className="w-44 bg-surface border border-border rounded-xl shadow-lg py-1.5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {ALL_DEPTS.map((role) => {
+              const selected = role === user.role;
+              return (
+                <button
+                  key={role}
+                  type="button"
+                  role="option"
+                  aria-selected={selected}
+                  onClick={() => {
+                    setOpen(false);
+                    if (!selected) onChange(role);
+                  }}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors ${
+                    selected
+                      ? 'bg-accent/10 text-accent font-semibold'
+                      : 'text-primary hover:bg-slate-100'
+                  }`}
+                >
+                  <span
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold ${DEPT_COLORS[role]}`}
+                  >
+                    {role === 'Admin' && <Shield size={10} />}
+                    {role}
+                  </span>
+                  {selected && <span className="ml-auto text-[10px] text-accent">Actual</span>}
+                </button>
+              );
+            })}
+          </div>,
+          document.body,
+        )}
+    </>
+  );
+}
+
 interface UserRowMenuProps {
   user: AppUser;
   anchorEl: HTMLButtonElement | null;
@@ -113,36 +233,7 @@ function UserRowMenu({
   onOpenDeleteModal,
   onToggleStatus,
 }: UserRowMenuProps) {
-  const menuRef = useRef<HTMLDivElement | null>(null);
-  const [style, setStyle] = useState<React.CSSProperties>({ visibility: 'hidden' });
-
-  useLayoutEffect(() => {
-    if (!anchorEl || !menuRef.current) return;
-    const rect = anchorEl.getBoundingClientRect();
-    const menuRect = menuRef.current.getBoundingClientRect();
-    const gap = 8;
-    let top = rect.bottom + gap;
-    if (top + menuRect.height > window.innerHeight - gap) {
-      top = rect.top - menuRect.height - gap;
-    }
-    const left = Math.min(Math.max(8, rect.right - menuRect.width), window.innerWidth - menuRect.width - 8);
-    setStyle({ position: 'fixed', top, left, zIndex: 9999 });
-  }, [anchorEl]);
-
-  useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (
-        menuRef.current &&
-        !menuRef.current.contains(e.target as Node) &&
-        anchorEl &&
-        !anchorEl.contains(e.target as Node)
-      ) {
-        onClose();
-      }
-    };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [onClose, anchorEl]);
+  const { menuRef, style } = useAnchoredMenu(anchorEl, onClose);
 
   const item = (
     icon: React.ReactNode,
@@ -159,7 +250,9 @@ function UserRowMenu({
         onClose();
       }}
       className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm rounded-md transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed ${
-        danger ? 'text-red-600 hover:bg-red-50' : 'text-slate-700 hover:bg-slate-100'
+        danger
+          ? 'text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/15'
+          : 'text-slate-700 hover:bg-slate-100'
       }`}
     >
       {icon}
@@ -171,7 +264,7 @@ function UserRowMenu({
     <div
       ref={menuRef}
       style={style}
-      className="w-52 bg-white border border-border rounded-xl shadow-lg py-1.5"
+      className="w-52 bg-surface border border-border rounded-xl shadow-lg py-1.5"
       onClick={(e) => e.stopPropagation()}
     >
       {item(<UserCog size={15} className="text-slate-400" />, 'Cambiar rol', () => onOpenRoleModal(user))}
@@ -242,21 +335,43 @@ export default function Users() {
     );
   };
 
+  const applyRoleChange = async (user: AppUser, nextRole: Dept) => {
+    if (nextRole === user.role) return;
+    setIsSavingRole(true);
+    try {
+      const updated = await api.updateUser(user.id, { role: nextRole });
+      updateUserInList(updated);
+      toast.success(`Rol de ${user.name} actualizado a ${nextRole}`);
+      if (user.id === currentUser?.id) {
+        useAuthStore.getState().patchSessionUser({ role: nextRole });
+      }
+    } catch (e) {
+      toast.error(getErrorMessage(e, 'Error al cambiar el rol'));
+      throw e;
+    } finally {
+      setIsSavingRole(false);
+    }
+  };
+
   const handleRoleChange = async () => {
     if (!roleModalUser || roleDraft === roleModalUser.role) {
       setRoleModalUser(null);
       return;
     }
-    setIsSavingRole(true);
     try {
-      const updated = await api.updateUser(roleModalUser.id, { role: roleDraft });
-      updateUserInList(updated);
-      toast.success(`Rol de ${roleModalUser.name} actualizado a ${roleDraft}`);
+      await applyRoleChange(roleModalUser, roleDraft);
       setRoleModalUser(null);
-    } catch (e) {
-      toast.error(getErrorMessage(e, 'Error al cambiar el rol'));
-    } finally {
-      setIsSavingRole(false);
+    } catch {
+      /* toast ya mostrado */
+    }
+  };
+
+  const handleInlineRoleChange = async (user: AppUser, nextRole: Dept) => {
+    if (nextRole === user.role || isSavingRole) return;
+    try {
+      await applyRoleChange(user, nextRole);
+    } catch {
+      /* toast ya mostrado; el select se re-renderiza con el rol actual */
     }
   };
 
@@ -338,7 +453,9 @@ export default function Users() {
           <div>
             <h1 className="text-2xl font-bold text-primary">Usuarios</h1>
             <p className="text-sm text-slate-500 mt-1">
-              Directorio del equipo · {users.length} usuarios · {onlineCount} en línea
+              {isAdmin
+                ? `Gestión del equipo · ${users.length} usuarios · ${onlineCount} en línea · puedes cambiar roles desde la columna Departamento`
+                : `Directorio del equipo · ${users.length} usuarios · ${onlineCount} en línea`}
             </p>
           </div>
           {isAdmin && activeTab === 'team' ? (
@@ -482,7 +599,10 @@ export default function Users() {
                       const presence = getPresence(user, currentUser?.id);
                       const isOnline = presence === 'Activo';
                       return (
-                        <tr key={user.id} className="hover:bg-slate-50/70 transition-colors group">
+                        <tr
+                          key={user.id}
+                          className="hover:bg-slate-50 transition-colors group"
+                        >
                           <td className="px-5 py-4 align-middle">
                             <div
                               className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold ${user.avatarColor}`}
@@ -508,12 +628,20 @@ export default function Users() {
                             </div>
                           </td>
                           <td className="px-4 py-4 align-middle">
-                            <span
-                              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-xs font-semibold ${DEPT_COLORS[user.role]}`}
-                            >
-                              {user.role === 'Admin' && <Shield size={11} />}
-                              {user.role}
-                            </span>
+                            {isAdmin ? (
+                              <RoleSelect
+                                user={user}
+                                disabled={isSavingRole}
+                                onChange={(role) => void handleInlineRoleChange(user, role)}
+                              />
+                            ) : (
+                              <span
+                                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-xs font-semibold ${DEPT_COLORS[user.role]}`}
+                              >
+                                {user.role === 'Admin' && <Shield size={11} />}
+                                {user.role}
+                              </span>
+                            )}
                           </td>
                           <td className="px-4 py-4 align-middle">
                             <span
@@ -539,10 +667,8 @@ export default function Users() {
                                 type="button"
                                 title="Opciones de administrador"
                                 onClick={() => setOpenMenuId(openMenuId === user.id ? null : user.id)}
-                                className={`p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all ${
-                                  openMenuId === user.id
-                                    ? 'opacity-100 bg-slate-100'
-                                    : 'opacity-0 group-hover:opacity-100'
+                                className={`p-1 rounded-md text-slate-400 hover:text-primary hover:bg-slate-100 transition-all ${
+                                  openMenuId === user.id ? 'bg-slate-100 text-primary' : ''
                                 }`}
                               >
                                 <MoreVertical size={15} />

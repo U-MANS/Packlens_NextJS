@@ -10,7 +10,9 @@ export type LifecycleStatus =
   | 'Pendiente SAP'
   | 'Vigente'
   | 'Temporal'
-  | 'Obsoleta';
+  | 'Obsoleta'
+  | 'En proceso de cambio'
+  | 'Sustituido';
 
 export type ProjectStatus =
   | 'En diseño'
