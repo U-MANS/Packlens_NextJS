@@ -253,7 +253,7 @@ export default function AdminOrgSettings() {
           {config?.flows.map((f) => (
             <li key={f.id}>
               <span className="font-medium text-primary">{f.name}</span>
-              <span className="text-slate-400">  {f.phaseOrder.length} fases</span>
+              <span className="text-slate-400"> — {f.phaseOrder.length} fases</span>
             </li>
           ))}
         </ul>

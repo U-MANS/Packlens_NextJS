@@ -25,6 +25,7 @@ import type { LifecycleStatus, Project } from '../types';
 import { getErrorMessage } from '../utils/errors';
 import { isPhaseOwnedByRole, phasesOwnedByRole } from '../utils/phase';
 import { filterProjectsForRole, isComercialView } from '../utils/roles';
+import { projectMatchesSearch } from '../utils/projectSearch';
 import { formatDate } from '../utils/dates';
 
 // --- Lifecycle badge ----------------------------------------------------------
@@ -253,13 +254,13 @@ const ProjectRow: React.FC<ProjectRowProps> = ({ project, openMenuId, setOpenMen
       <td className="px-6 py-4 text-slate-600">
         {project.productLine || project.format ? (
           <>
-            <div className="text-slate-700">{project.productLine ?? ''}</div>
+            <div className="text-slate-700">{project.productLine ?? '—'}</div>
             {project.format && (
               <div className="text-xs text-slate-400 mt-0.5">{project.format}</div>
             )}
           </>
         ) : (
-          <span className="text-slate-300"></span>
+          <span className="text-slate-300">—</span>
         )}
       </td>
       <td className="px-6 py-4">
@@ -332,7 +333,8 @@ const ProjectList = () => {
   const isComercial = isComercialView(activeRole);
   const awaitingMe = searchParams.get('awaitingMe') === '1';
   const rejectedFilter = searchParams.get('rejected') === '1';
-  const [searchTerm, setSearchTerm] = useState('');
+  const qParam = searchParams.get('q') ?? '';
+  const [searchTerm, setSearchTerm] = useState(qParam);
   const [filterStatus, setFilterStatus] = useState(
     rejectedFilter ? 'Cambios solicitados' : 'Todos',
   );
@@ -384,6 +386,10 @@ const ProjectList = () => {
     if (rejectedFilter) setFilterStatus('Cambios solicitados');
   }, [rejectedFilter]);
 
+  useEffect(() => {
+    setSearchTerm(qParam);
+  }, [qParam]);
+
   const myPhases = useMemo(() => phasesOwnedByRole(activeRole), [activeRole]);
 
   const visibleProjects = useMemo(
@@ -392,9 +398,7 @@ const ProjectList = () => {
   );
 
   const filteredProjects = visibleProjects.filter((p) => {
-    const matchesSearch =
-      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.sku.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = projectMatchesSearch(p, searchTerm);
     const matchesStatus = filterStatus === 'Todos' || p.status === filterStatus;
     const matchesLifecycle =
       filterLifecycle === 'Todos' || (p.lifecycleStatus ?? 'Borrador') === filterLifecycle;
@@ -526,6 +530,7 @@ const ProjectList = () => {
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
+              aria-label="Filtrar por estado del proyecto"
               className="border border-border rounded-md px-3 py-2 text-sm bg-white focus:outline-none focus:border-accent"
             >
               {statuses.map((s) => (
@@ -536,6 +541,7 @@ const ProjectList = () => {
               <select
                 value={filterLifecycle}
                 onChange={(e) => setFilterLifecycle(e.target.value as LifecycleStatus | 'Todos')}
+                aria-label="Filtrar por ciclo de vida"
                 className="border border-border rounded-md px-3 py-2 text-sm bg-white focus:outline-none focus:border-accent"
               >
                 <option value="Todos">Todos los ciclos</option>

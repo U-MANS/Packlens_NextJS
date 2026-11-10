@@ -222,7 +222,7 @@ export default function InvitationsPanel() {
                       {formatDate(invitation.expires_at)}
                     </td>
                     <td className="px-4 py-3 text-slate-500">
-                      {invitation.invited_by_name ?? ''}
+                      {invitation.invited_by_name ?? '—'}
                     </td>
                     <td className="px-4 py-3">
                       {invitation.status === 'pending' && (

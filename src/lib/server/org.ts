@@ -73,7 +73,10 @@ async function ensureHeliosFallback(
 
 /**
  * Resuelve usuario + organización activa.
- * Si MULTI_TENANT=false o aún no hay tablas/memberships, usa Helios implícita.
+ * - No crea memberships en la petición (migración solo vía SQL).
+ * - Sin membresía activa autorizada → 403.
+ * - Error al consultar memberships → 503 (no concede Helios).
+ * - MULTI_TENANT=false → Helios implícita sin upsert.
  */
 export async function requireOrg(request: Request): Promise<OrgContext | Response> {
   const userOrErr = await requireUser(request);
@@ -99,22 +102,14 @@ export async function requireOrg(request: Request): Promise<OrgContext | Respons
     .eq('user_id', user.id)
     .eq('status', 'Activo');
 
-  // Tabla aún no migrada → Helios implícita
   if (memErr) {
-    const organization = await ensureHeliosFallback(admin);
-    return {
-      user,
-      organizationId: organization.id,
-      organization,
-      membership: null,
-      role: user.role,
-      config: mergeTenantConfig(organization.template_key, organization.settings),
-    };
+    console.error('[requireOrg] memberships query failed', memErr.message);
+    return jsonError('No se pudo verificar la autorización de organización', 503);
   }
 
   const list = (memberships || []) as OrgMembership[];
   const wanted = requestedOrgId(request);
-  /** Admin de plataforma (users.role): puede entrar a cualquier tenant. */
+  /** Admin de plataforma (users.role): puede entrar a cualquier tenant con cabecera explícita. */
   const isPlatformAdmin = user.role === 'Admin';
 
   let membership: OrgMembership | null = null;
@@ -125,7 +120,9 @@ export async function requireOrg(request: Request): Promise<OrgContext | Respons
     if (!membership) {
       if (!isPlatformAdmin) return jsonError('Sin acceso a esta organización', 403);
       organization = await loadOrganization(admin, wanted);
-      if (!organization) return jsonError('Organización no encontrada', 404);
+      if (!organization || organization.status !== 'Activo') {
+        return jsonError('Organización no encontrada', 404);
+      }
     }
   } else if (list.length === 1) {
     membership = list[0];
@@ -135,31 +132,22 @@ export async function requireOrg(request: Request): Promise<OrgContext | Respons
   }
 
   if (membership && !organization) {
-    organization =
-      (await loadOrganization(admin, membership.organization_id)) ||
-      (await ensureHeliosFallback(admin));
-  } else if (!organization) {
-    organization = await ensureHeliosFallback(admin);
-    // Auto-membership de emergencia (usuario pre-migración)
-    await admin.from('memberships').upsert(
-      {
-        user_id: user.id,
-        organization_id: organization.id,
-        role: user.role,
-        status: 'Activo',
-      },
-      { onConflict: 'user_id,organization_id' }
-    );
-    membership = {
-      id: '',
-      user_id: user.id,
-      organization_id: organization.id,
-      role: user.role,
-      status: 'Activo',
-    };
+    organization = await loadOrganization(admin, membership.organization_id);
+    if (!organization) {
+      return jsonError('Organización de la membresía no encontrada', 403);
+    }
   }
 
-  // Plataforma Admin sin membership en el tenant activo: mantiene Admin
+  // Sin membresía y sin org por header:
+  // - Usuario normal → 403 (nunca upsert / reactivar Helios).
+  // - Admin plataforma → puede operar sobre Helios sin crear membership.
+  if (!organization) {
+    if (!isPlatformAdmin) {
+      return jsonError('Sin organización asignada. Contacta con un administrador.', 403);
+    }
+    organization = await ensureHeliosFallback(admin);
+  }
+
   const role = membership?.role || (isPlatformAdmin ? 'Admin' : user.role);
   return {
     user: { ...user, role },
@@ -215,7 +203,7 @@ export async function getProjectInOrg(
     .maybeSingle();
 
   if (error) {
-    // Columna organization_id aún no existe → fallback sin filtro
+    // Columna organization_id aún no existe → fallback sin filtro (pre-migración)
     if (/organization_id/i.test(error.message)) {
       const fallback = await admin.from('projects').select(columns).eq('id', projectId).maybeSingle();
       if (fallback.error) return { data: null, error: fallback.error.message };
@@ -230,6 +218,36 @@ export async function getProjectInOrg(
     data: data ? (data as unknown as Record<string, unknown>) : null,
     error: null,
   };
+}
+
+/**
+ * Mutación acotada al tenant. Si el id no pertenece a la org → not_found (404).
+ * Nunca actualiza solo por id.
+ */
+export async function updateProjectInOrg(
+  projectId: string,
+  organizationId: string,
+  updates: Record<string, unknown>
+): Promise<{ error: string | null; notFound?: boolean }> {
+  const admin = getAdminClient();
+  const { data, error } = await admin
+    .from('projects')
+    .update(updates)
+    .eq('id', projectId)
+    .eq('organization_id', organizationId)
+    .select('id');
+
+  if (error) {
+    if (/organization_id/i.test(error.message)) {
+      const retry = await admin.from('projects').update(updates).eq('id', projectId).select('id');
+      if (retry.error) return { error: retry.error.message };
+      if (!retry.data?.length) return { error: null, notFound: true };
+      return { error: null };
+    }
+    return { error: error.message };
+  }
+  if (!data?.length) return { error: null, notFound: true };
+  return { error: null };
 }
 
 export function orgToApi(ctx: OrgContext) {

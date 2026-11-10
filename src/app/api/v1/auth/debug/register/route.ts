@@ -5,7 +5,8 @@ import { signInWithPassword, SupabaseAuthError } from '@/lib/supabase/auth';
 import { adminCreateUser } from '@/lib/supabase/admin-users';
 import { jsonError, jsonOk } from '@/lib/server/http';
 
-const ALLOWED_ROLES = new Set(['Marketing', 'Diseño', 'I+D', 'Admin', 'Comercial']);
+/** Solo roles de negocio. Nunca Admin/Manager (privilegio administrativo). */
+const ALLOWED_ROLES = new Set(['Marketing', 'Diseño', 'I+D', 'Comercial']);
 
 function initialsFromName(name: string) {
   const parts = name.trim().split(/\s+/);
@@ -14,20 +15,23 @@ function initialsFromName(name: string) {
 }
 
 export async function POST(request: NextRequest) {
+  // Gate primero: sin leer body. En prod / flag off → 403.
   if (!env.debugSignup()) {
-    return jsonError(
-      'Registro debug deshabilitado. Activa DEBUG_ENABLE_SIGNUP=true en el backend.',
-      403,
-    );
+    return jsonError('Registro debug deshabilitado', 403);
   }
 
-  const body = (await request.json()) as {
+  let body: {
     name?: string;
     email?: string;
     password?: string;
     role?: string;
     initials?: string;
   };
+  try {
+    body = (await request.json()) as typeof body;
+  } catch {
+    return jsonError('JSON inválido', 400);
+  }
 
   if (!body.name || !body.email || !body.password || !body.role) {
     return jsonError('name, email, password y role son obligatorios', 400);
@@ -54,7 +58,7 @@ export async function POST(request: NextRequest) {
     // Esperar trigger de perfil
     let profile = null;
     for (let i = 0; i < 5; i++) {
-      const { data } = await admin.from('users').select('id').eq('id', authUser.id).maybeSingle();
+      const { data } = await admin.from('users').select('id, role').eq('id', authUser.id).maybeSingle();
       if (data) {
         profile = data;
         break;
@@ -66,6 +70,11 @@ export async function POST(request: NextRequest) {
         'Usuario creado en Auth pero sin perfil. Ejecuta 02_auth_profiles.sql en Supabase.',
         500,
       );
+    }
+
+    // Defensa: el trigger no debe elevar a Admin/Manager desde este endpoint
+    if (profile.role === 'Admin' || profile.role === 'Manager') {
+      return jsonError('Perfil con privilegio no permitido vía registro debug', 500);
     }
 
     const session = await signInWithPassword(body.email, body.password);

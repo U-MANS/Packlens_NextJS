@@ -1,7 +1,11 @@
 import { NextRequest } from 'next/server';
 import { requireUser } from '@/lib/server/auth';
 import { jsonError, jsonOk } from '@/lib/server/http';
-import { createSignedUploadUrl, generateStorageKey } from '@/lib/server/files';
+import {
+  createSignedUploadUrl,
+  createUploadReservation,
+  generateStorageKey,
+} from '@/lib/server/files';
 import { canUploadArteFinal } from '@/lib/server/permissions';
 import { getProjectRow } from '@/lib/server/workflow';
 
@@ -26,6 +30,15 @@ export async function POST(request: NextRequest, context: Ctx) {
 
   const storage_key = generateStorageKey(`projects/${id}/arte-final`, body.file_name);
   try {
+    await createUploadReservation({
+      storage_key,
+      project_id: id,
+      user_id: user.id,
+      purpose: 'arte_final',
+      file_name: body.file_name,
+      mime_type: body.mime_type || 'application/octet-stream',
+      expected_size: body.file_size,
+    });
     const signed = await createSignedUploadUrl(storage_key);
     return jsonOk({
       upload_url: signed.upload_url,

@@ -235,6 +235,8 @@ export const useAppStore = create<AppState>()((set, get) => ({
       if (patch.lifecycleStatus !== undefined) apiPatch.lifecycle_status = patch.lifecycleStatus;
       if (patch.name !== undefined) apiPatch.name = patch.name;
       if (patch.description !== undefined) apiPatch.description = patch.description;
+      if (patch.productLine !== undefined) apiPatch.product_line = patch.productLine || null;
+      if (patch.format !== undefined) apiPatch.format = patch.format || null;
       if (patch.launchDate !== undefined) apiPatch.launch_date = patch.launchDate || null;
       if (patch.artDeadline !== undefined) apiPatch.art_deadline = patch.artDeadline || null;
       if (patch.designLead !== undefined) apiPatch.design_lead = patch.designLead || null;

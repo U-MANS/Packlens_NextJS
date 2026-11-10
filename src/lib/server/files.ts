@@ -106,6 +106,120 @@ export async function createSignedUploadUrl(storageKey: string): Promise<{
   };
 }
 
+const UPLOAD_RESERVATION_TTL_MS = 60 * 60 * 1000;
+
+export type UploadReservationRow = {
+  id: string;
+  storage_key: string;
+  project_id: string;
+  user_id: string;
+  purpose: string;
+  file_name: string;
+  mime_type: string | null;
+  expected_size: number | null;
+  created_at: string;
+  expires_at: string;
+  consumed_at: string | null;
+};
+
+export type StorageObjectMeta = {
+  size: number;
+  contentType: string | null;
+};
+
+/** Metadatos del objeto en Storage; falla si no existe. */
+export async function getStorageObjectMeta(storageKey: string): Promise<StorageObjectMeta> {
+  const admin = getAdminClient();
+  const { data, error } = await admin.storage.from(env.storageBucket()).info(storageKey);
+  if (error || !data) {
+    throw new Error(error?.message || 'Objeto no encontrado en Storage');
+  }
+  const raw = data as {
+    size?: number;
+    contentType?: string;
+    content_type?: string;
+    metadata?: { size?: number; mimetype?: string } | null;
+  };
+  const size =
+    typeof raw.size === 'number'
+      ? raw.size
+      : typeof raw.metadata?.size === 'number'
+        ? raw.metadata.size
+        : 0;
+  if (!size || size <= 0) {
+    throw new Error('Objeto vacío o sin tamaño en Storage');
+  }
+  const contentType =
+    (typeof raw.contentType === 'string' && raw.contentType) ||
+    (typeof raw.content_type === 'string' && raw.content_type) ||
+    (typeof raw.metadata?.mimetype === 'string' && raw.metadata.mimetype) ||
+    null;
+  return { size, contentType };
+}
+
+export async function createUploadReservation(payload: {
+  storage_key: string;
+  project_id: string;
+  user_id: string;
+  purpose?: 'arte_final';
+  file_name: string;
+  mime_type?: string;
+  expected_size?: number;
+}): Promise<UploadReservationRow> {
+  const admin = getAdminClient();
+  const expiresAt = new Date(Date.now() + UPLOAD_RESERVATION_TTL_MS).toISOString();
+  const { data, error } = await admin
+    .from('upload_reservations')
+    .insert({
+      storage_key: payload.storage_key,
+      project_id: payload.project_id,
+      user_id: payload.user_id,
+      purpose: payload.purpose ?? 'arte_final',
+      file_name: payload.file_name,
+      mime_type: payload.mime_type || null,
+      expected_size:
+        typeof payload.expected_size === 'number' && payload.expected_size > 0
+          ? payload.expected_size
+          : null,
+      expires_at: expiresAt,
+    })
+    .select('*')
+    .single();
+  if (error || !data) {
+    throw new Error(error?.message || 'No se pudo crear reserva de subida');
+  }
+  return data as UploadReservationRow;
+}
+
+/**
+ * Consume atómicamente una reserva abierta (un solo uso) del usuario/proyecto.
+ * Devuelve null si no existe, expiró o ya se usó.
+ */
+export async function consumeUploadReservation(params: {
+  storage_key: string;
+  project_id: string;
+  user_id: string;
+  purpose?: 'arte_final';
+}): Promise<UploadReservationRow | null> {
+  const admin = getAdminClient();
+  const now = new Date().toISOString();
+  const { data, error } = await admin
+    .from('upload_reservations')
+    .update({ consumed_at: now })
+    .eq('storage_key', params.storage_key)
+    .eq('project_id', params.project_id)
+    .eq('user_id', params.user_id)
+    .eq('purpose', params.purpose ?? 'arte_final')
+    .is('consumed_at', null)
+    .gt('expires_at', now)
+    .select('*')
+    .maybeSingle();
+  if (error) {
+    throw new Error(error.message || 'Error consumiendo reserva de subida');
+  }
+  return (data as UploadReservationRow | null) ?? null;
+}
+
 export async function fetchFileBytes(storageKey: string): Promise<{ content: Buffer; mime: string }> {
   const admin = getAdminClient();
   const { data, error } = await admin.storage.from(env.storageBucket()).download(storageKey);

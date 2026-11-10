@@ -1,6 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { ThemeToggle } from '../components/theme/ThemeToggle';
+import { resolvePostLoginPath, type RedirectLocation } from '../lib/auth/postLoginRedirect';
 import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
 
@@ -10,7 +11,10 @@ export default function Login() {
   const { login, isLoading, error, clearError, user } = useAuthStore();
   const bootstrap = useAppStore((s) => s.bootstrap);
 
-  const from = (location.state as { from?: { pathname: string } })?.from?.pathname ?? '/';
+  const from = useMemo(() => {
+    const stateFrom = (location.state as { from?: RedirectLocation } | null)?.from;
+    return resolvePostLoginPath(stateFrom, '/');
+  }, [location.state]);
 
   useEffect(() => {
     if (user) navigate(from, { replace: true });
@@ -97,7 +101,7 @@ export default function Login() {
           Usa las credenciales de tu cuenta Supabase Auth
         </p>
 
-        {(process.env.NEXT_PUBLIC_DEBUG_SIGNUP === 'true' || process.env.NODE_ENV === 'development') && (
+        {process.env.NEXT_PUBLIC_DEBUG_SIGNUP === 'true' && (
           <p className="text-center text-sm mt-3">
             <Link to="/register-debug" className="text-accent font-medium hover:underline">
               Registro debug (desarrollo)

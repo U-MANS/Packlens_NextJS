@@ -66,7 +66,7 @@ export function phaseDisplayName(
   config: TenantConfig,
   phase: string | null | undefined
 ): string {
-  if (!phase) return '';
+  if (!phase) return '—';
   const def = config.phases.find((p) => p.label === phase);
   return def?.displayName || phase;
 }

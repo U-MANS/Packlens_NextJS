@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
@@ -31,17 +31,56 @@ export const Modal: React.FC<ModalProps> = ({
   footer,
   preventClose = false,
 }) => {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  const descriptionId = useId();
+
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !preventClose) onClose();
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const dialog = dialogRef.current;
+    const focusableSelector =
+      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+    const focusFirst = () => {
+      const first = dialog?.querySelector<HTMLElement>(focusableSelector);
+      (first ?? dialog)?.focus();
     };
+    focusFirst();
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !preventClose) {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      if (e.key !== 'Tab' || !dialog) return;
+      const nodes = Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector)).filter(
+        (el) => !el.hasAttribute('disabled') && el.tabIndex !== -1,
+      );
+      if (nodes.length === 0) {
+        e.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = nodes[0];
+      const last = nodes[nodes.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
     document.addEventListener('keydown', onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = prev;
+      previouslyFocused?.focus?.();
     };
   }, [open, onClose, preventClose]);
 
@@ -58,19 +97,27 @@ export const Modal: React.FC<ModalProps> = ({
         onClick={handleClose}
       />
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        className={`relative w-full ${sizeMap[size]} bg-surface rounded-xl shadow-2xl border border-border overflow-hidden flex flex-col max-h-[92vh]`}
+        aria-labelledby={title ? titleId : undefined}
+        aria-describedby={description ? descriptionId : undefined}
+        tabIndex={-1}
+        className={`relative w-full ${sizeMap[size]} bg-surface rounded-xl shadow-2xl border border-border overflow-hidden flex flex-col max-h-[92vh] outline-none`}
         onClick={(e) => e.stopPropagation()}
       >
         {(title || description) && (
           <div className="px-6 pt-5 pb-4 border-b border-border flex items-start justify-between gap-4">
             <div>
               {title && (
-                <h2 className="text-lg font-semibold text-primary">{title}</h2>
+                <h2 id={titleId} className="text-lg font-semibold text-primary">
+                  {title}
+                </h2>
               )}
               {description && (
-                <p className="text-sm text-slate-500 mt-1">{description}</p>
+                <p id={descriptionId} className="text-sm text-slate-500 mt-1">
+                  {description}
+                </p>
               )}
             </div>
             <button

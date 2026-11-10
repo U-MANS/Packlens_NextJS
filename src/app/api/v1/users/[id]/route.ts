@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { userToApi } from '@/lib/server/auth';
+import { userToApi, type DbUser } from '@/lib/server/auth';
 import { jsonError, jsonOk } from '@/lib/server/http';
 import { requireOrg } from '@/lib/server/org';
 import {
@@ -10,8 +10,21 @@ import {
 } from '@/lib/server/permissions';
 import { getAdminClient } from '@/lib/supabase/admin';
 import { adminDeleteUser, adminUpdateUserMetadata } from '@/lib/supabase/admin-users';
+import { isPlatformAdminRole } from '@/types';
 
 type Ctx = { params: Promise<{ id: string }> };
+
+async function getMembershipInOrg(organizationId: string, userId: string) {
+  const admin = getAdminClient();
+  const { data, error } = await admin
+    .from('memberships')
+    .select('id, role, status, user:users(*)')
+    .eq('organization_id', organizationId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) return { error: error.message, membership: null as null };
+  return { error: null, membership: data };
+}
 
 async function countActiveAdmins(
   organizationId: string,
@@ -27,42 +40,33 @@ async function countActiveAdmins(
   if (excludeId) query = query.neq('user_id', excludeId);
   const { count, error } = await query;
   if (!error) return count ?? 0;
+  return 0;
+}
 
-  let fallback = admin
-    .from('users')
-    .select('id', { count: 'exact', head: true })
-    .eq('role', 'Admin')
-    .eq('status', 'Activo');
-  if (excludeId) fallback = fallback.neq('id', excludeId);
-  const res = await fallback;
-  return res.count ?? 0;
+function membershipUserToApi(
+  user: DbUser,
+  membership: { role: string; status: string }
+) {
+  return userToApi({
+    ...user,
+    role: membership.role || user.role,
+    status: membership.status || user.status,
+  });
 }
 
 export async function GET(request: NextRequest, context: Ctx) {
   const ctx = await requireOrg(request);
   if (ctx instanceof Response) return ctx;
   const { id } = await context.params;
-  const admin = getAdminClient();
-  const { data: membership } = await admin
-    .from('memberships')
-    .select('role, status, user:users(*)')
-    .eq('organization_id', ctx.organizationId)
-    .eq('user_id', id)
-    .maybeSingle();
-  if (membership?.user && !Array.isArray(membership.user)) {
-    const u = membership.user as unknown as Parameters<typeof userToApi>[0];
-    return jsonOk(
-      userToApi({
-        ...u,
-        role: membership.role || u.role,
-        status: membership.status || u.status,
-      })
-    );
+
+  const { error, membership } = await getMembershipInOrg(ctx.organizationId, id);
+  if (error) return jsonError(error, 500);
+  if (!membership?.user || Array.isArray(membership.user)) {
+    return jsonError('Usuario no encontrado en esta organización', 404);
   }
-  const { data, error } = await admin.from('users').select('*').eq('id', id).maybeSingle();
-  if (error) return jsonError(error.message, 500);
-  if (!data) return jsonError('Usuario no encontrado', 404);
-  return jsonOk(userToApi(data as Parameters<typeof userToApi>[0]));
+
+  const u = membership.user as unknown as DbUser;
+  return jsonOk(membershipUserToApi(u, membership));
 }
 
 export async function PATCH(request: NextRequest, context: Ctx) {
@@ -88,27 +92,32 @@ export async function PATCH(request: NextRequest, context: Ctx) {
     return jsonError(`Rol no válido. Usa: ${USER_ROLES.join(', ')}`, 400);
   }
   if (body.status !== undefined && body.status !== 'Activo' && body.status !== 'Inactivo') {
-    return jsonError("Estado no válido. Usa: Activo o Inactivo", 400);
+    return jsonError('Estado no válido. Usa: Activo o Inactivo', 400);
   }
 
-  const admin = getAdminClient();
-  const { data: existing } = await admin.from('users').select('*').eq('id', id).maybeSingle();
-  if (!existing) return jsonError('Usuario no encontrado', 404);
+  const { error: memErr, membership } = await getMembershipInOrg(ctx.organizationId, id);
+  if (memErr) return jsonError(memErr, 500);
+  if (!membership?.user || Array.isArray(membership.user)) {
+    return jsonError('Usuario no encontrado en esta organización', 404);
+  }
 
-  const nextRole = body.role ?? existing.role;
-  const nextStatus = body.status ?? existing.status;
+  const profile = membership.user as unknown as DbUser;
+  const currentMemberRole = membership.role || profile.role;
+  const currentMemberStatus = membership.status || profile.status;
+  const nextRole = body.role ?? currentMemberRole;
+  const nextStatus = body.status ?? currentMemberStatus;
+  const platformAdmin = isPlatformAdminRole(current.role);
 
   if (
-    !canAssignRole(current, nextRole, { targetCurrentRole: existing.role }) ||
+    !canAssignRole(current, nextRole, { targetCurrentRole: currentMemberRole }) ||
     (body.status !== undefined &&
-      !canAssignRole(current, existing.role, { targetCurrentRole: existing.role }))
+      !canAssignRole(current, currentMemberRole, { targetCurrentRole: currentMemberRole }))
   ) {
     return jsonError('No puedes modificar usuarios Admin de plataforma', 403);
   }
 
-  const wasActiveAdmin = existing.role === 'Admin' && existing.status === 'Activo';
+  const wasActiveAdmin = currentMemberRole === 'Admin' && currentMemberStatus === 'Activo';
   const willRemainActiveAdmin = nextRole === 'Admin' && nextStatus === 'Activo';
-
   if (wasActiveAdmin && !willRemainActiveAdmin) {
     const others = await countActiveAdmins(ctx.organizationId, id);
     if (others < 1) {
@@ -119,39 +128,62 @@ export async function PATCH(request: NextRequest, context: Ctx) {
     }
   }
 
-  const updates: Record<string, unknown> = {};
-  for (const key of ['name', 'role', 'status', 'initials'] as const) {
-    if (body[key] !== undefined) updates[key] = body[key];
-  }
-
-  const { data, error } = await admin.from('users').update(updates).eq('id', id).select('*').single();
-  if (error || !data) return jsonError(error?.message || 'Error actualizando', 500);
-
-  if (body.role !== undefined || body.status !== undefined) {
-    await admin.from('memberships').upsert(
-      {
-        user_id: id,
-        organization_id: ctx.organizationId,
-        role: nextRole,
-        status: nextStatus === 'Inactivo' ? 'Inactivo' : 'Activo',
-      },
-      { onConflict: 'user_id,organization_id' }
+  // Nombre/initials globales: solo Admin de plataforma (evita tocar identidad compartida entre tenants)
+  if ((body.name !== undefined || body.initials !== undefined) && !platformAdmin) {
+    return jsonError(
+      'Solo Admin de plataforma puede cambiar nombre o iniciales globales',
+      403,
     );
   }
 
-  if (body.role || body.name || body.initials) {
-    await adminUpdateUserMetadata(id, {
-      name: data.name,
-      role: data.role,
-      initials: data.initials || '',
-    });
+  const admin = getAdminClient();
+
+  // Membresía del tenant (fuente de verdad de rol/estado en la org)
+  const { error: upsertErr } = await admin.from('memberships').upsert(
+    {
+      user_id: id,
+      organization_id: ctx.organizationId,
+      role: nextRole,
+      status: nextStatus === 'Inactivo' ? 'Inactivo' : 'Activo',
+    },
+    { onConflict: 'user_id,organization_id' }
+  );
+  if (upsertErr) return jsonError(upsertErr.message, 500);
+
+  let updatedProfile = profile;
+
+  if (platformAdmin) {
+    const updates: Record<string, unknown> = {};
+    if (body.name !== undefined) updates.name = body.name;
+    if (body.initials !== undefined) updates.initials = body.initials;
+    // Sync global role/status solo desde plataforma (no desde Manager de un cliente)
+    if (body.role !== undefined) updates.role = body.role;
+    if (body.status !== undefined) updates.status = body.status;
+
+    if (Object.keys(updates).length) {
+      const { data, error } = await admin
+        .from('users')
+        .update(updates)
+        .eq('id', id)
+        .select('*')
+        .single();
+      if (error || !data) return jsonError(error?.message || 'Error actualizando perfil', 500);
+      updatedProfile = data as DbUser;
+
+      if (body.role || body.name || body.initials) {
+        await adminUpdateUserMetadata(id, {
+          name: updatedProfile.name,
+          role: updatedProfile.role,
+          initials: updatedProfile.initials || '',
+        });
+      }
+    }
   }
 
   return jsonOk(
-    userToApi({
-      ...(data as Parameters<typeof userToApi>[0]),
+    membershipUserToApi(updatedProfile, {
       role: nextRole,
-      status: nextStatus,
+      status: nextStatus === 'Inactivo' ? 'Inactivo' : 'Activo',
     })
   );
 }
@@ -167,11 +199,37 @@ export async function DELETE(request: NextRequest, context: Ctx) {
   const { id } = await context.params;
   if (id === current.id) return jsonError('No puedes eliminar tu propia cuenta', 400);
 
-  const admin = getAdminClient();
-  const { data } = await admin.from('users').select('id, role').eq('id', id).maybeSingle();
-  if (!data) return jsonError('Usuario no encontrado', 404);
-  if (!canAssignRole(current, data.role, { targetCurrentRole: data.role })) {
+  const { error: memErr, membership } = await getMembershipInOrg(ctx.organizationId, id);
+  if (memErr) return jsonError(memErr, 500);
+  if (!membership) {
+    return jsonError('Usuario no encontrado en esta organización', 404);
+  }
+
+  const memberRole = membership.role;
+  if (!canAssignRole(current, memberRole, { targetCurrentRole: memberRole })) {
     return jsonError('No puedes eliminar usuarios Admin de plataforma', 403);
+  }
+
+  const admin = getAdminClient();
+  const platformAdmin = isPlatformAdminRole(current.role);
+
+  if (!platformAdmin) {
+    // Manager: solo quita del tenant (no borra Auth ni otras orgs)
+    const { error } = await admin
+      .from('memberships')
+      .delete()
+      .eq('user_id', id)
+      .eq('organization_id', ctx.organizationId);
+    if (error) return jsonError(error.message, 500);
+    return new Response(null, { status: 204 });
+  }
+
+  // Admin de plataforma: eliminación global de identidad Auth (+ cascade memberships)
+  if (memberRole === 'Admin') {
+    const others = await countActiveAdmins(ctx.organizationId, id);
+    if (others < 1) {
+      return jsonError('No puedes eliminar al único administrador activo', 400);
+    }
   }
 
   try {

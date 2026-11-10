@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   CalendarDays,
   ChevronLeft,
@@ -15,7 +15,9 @@ import {
 } from 'lucide-react';
 import { Modal } from '../components/ui/Modal';
 import { DateInput } from '../components/ui/DateInput';
+import { useAuthStore } from '../store/useAuthStore';
 import {
+  bindLocalCampaignsScope,
   fileToDataUrl,
   nextCampaignColor,
   useLocalCampaignsStore,
@@ -106,11 +108,26 @@ export default function CampaignsCalendar() {
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
 
+  const userId = useAuthStore((s) => s.user?.id ?? null);
+  const organizationId = useAuthStore((s) => s.organization?.id ?? null);
+  const scopeKey = useLocalCampaignsStore((s) => s.scopeKey);
   const campaigns = useLocalCampaignsStore((s) => s.campaigns);
   const hydrated = useLocalCampaignsStore((s) => s.hydrated);
   const addCampaign = useLocalCampaignsStore((s) => s.addCampaign);
   const updateCampaign = useLocalCampaignsStore((s) => s.updateCampaign);
   const removeCampaign = useLocalCampaignsStore((s) => s.removeCampaign);
+
+  useEffect(() => {
+    void bindLocalCampaignsScope(userId, organizationId);
+  }, [userId, organizationId]);
+
+  useEffect(() => {
+    setModalOpen(false);
+    setEditing(null);
+    setForm(emptyForm());
+    setError(null);
+    setUploading(false);
+  }, [scopeKey]);
 
   const monthStartIso = toISODate(startOfMonth(year, month));
   const monthEndIso = toISODate(new Date(year, month, daysInMonth(year, month)));

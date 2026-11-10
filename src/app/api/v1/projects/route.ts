@@ -36,7 +36,12 @@ export async function GET(request: NextRequest) {
   if (productLine) query = query.eq('product_line', productLine);
   if (market) query = query.eq('market', market);
   if (search) {
-    query = query.or(`name.ilike.%${search}%,sku.ilike.%${search}%`);
+    const term = search.replace(/[%_,]/g, '').trim();
+    if (term) {
+      query = query.or(
+        `name.ilike.%${term}%,sku.ilike.%${term}%,sap_code.ilike.%${term}%`,
+      );
+    }
   }
 
   const { data, error } = await query;

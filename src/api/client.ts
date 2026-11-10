@@ -84,13 +84,19 @@ function shouldAttemptRefresh(path: string, status: number): boolean {
   return !path.startsWith('/auth/login') && !path.startsWith('/auth/refresh') && !path.startsWith('/auth/debug/register') && !path.startsWith('/invites/');
 }
 
+/**
+ * Renueva el access token. Si no hay refreshToken, retorna false sin tocar
+ * refreshInFlight (evita dejar una promesa resuelta a false que bloquee
+ * renovaciones posteriores tras un login en la misma pestaña).
+ */
 async function refreshAccessToken(): Promise<boolean> {
   if (refreshInFlight) return refreshInFlight;
 
-  refreshInFlight = (async () => {
-    const { refreshToken } = readAuthStorage();
-    if (!refreshToken) return false;
+  const { refreshToken } = readAuthStorage();
+  if (!refreshToken) return false;
 
+  let flight!: Promise<boolean>;
+  flight = (async () => {
     try {
       const res = await fetch(`${API_BASE}/auth/refresh`, {
         method: 'POST',
@@ -109,11 +115,20 @@ async function refreshAccessToken(): Promise<boolean> {
     } catch {
       return false;
     } finally {
-      refreshInFlight = null;
+      // No borrar si login/reset ya arrancó otra renovación.
+      if (refreshInFlight === flight) {
+        refreshInFlight = null;
+      }
     }
   })();
 
-  return refreshInFlight;
+  refreshInFlight = flight;
+  return flight;
+}
+
+/** Limpia un refresh en curso o fallido (login / logout en la misma pestaña). */
+export function resetTokenRefreshGate() {
+  refreshInFlight = null;
 }
 
 export async function apiFetch<T>(

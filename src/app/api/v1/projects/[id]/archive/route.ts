@@ -1,23 +1,34 @@
 import { NextRequest } from 'next/server';
-import { requireUser } from '@/lib/server/auth';
 import { jsonError, jsonOk } from '@/lib/server/http';
-import { getAdminClient } from '@/lib/supabase/admin';
+import { getProjectInOrg, requireOrg, updateProjectInOrg } from '@/lib/server/org';
 import { reloadProject } from '@/lib/server/workflow';
+import { isOpsAdminRole } from '@/types';
 
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function POST(request: NextRequest, context: Ctx) {
-  const user = await requireUser(request);
-  if (user instanceof Response) return user;
-  const { id } = await context.params;
-  const admin = getAdminClient();
-  const { data: project } = await admin.from('projects').select('id').eq('id', id).maybeSingle();
-  if (!project) return jsonError('Proyecto no encontrado', 404);
+  const ctx = await requireOrg(request);
+  if (ctx instanceof Response) return ctx;
 
-  const { error } = await admin
-    .from('projects')
-    .update({ archived: true, status: 'Archivado', updated_at: new Date().toISOString() })
-    .eq('id', id);
-  if (error) return jsonError(error.message, 500);
+  // Archivar: Marketing / Admin / Manager (rol efectivo del tenant)
+  if (
+    ctx.role !== 'Marketing' &&
+    !isOpsAdminRole(ctx.role)
+  ) {
+    return jsonError('No tienes permiso para archivar proyectos', 403);
+  }
+
+  const { id } = await context.params;
+  const scoped = await getProjectInOrg(id, ctx.organizationId, 'id');
+  if (scoped.error) return jsonError(scoped.error, 500);
+  if (!scoped.data) return jsonError('Proyecto no encontrado', 404);
+
+  const result = await updateProjectInOrg(id, ctx.organizationId, {
+    archived: true,
+    status: 'Archivado',
+    updated_at: new Date().toISOString(),
+  });
+  if (result.notFound) return jsonError('Proyecto no encontrado', 404);
+  if (result.error) return jsonError(result.error, 500);
   return jsonOk(await reloadProject(id));
 }

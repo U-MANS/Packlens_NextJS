@@ -1,12 +1,12 @@
 import { NextRequest } from 'next/server';
-import { requireUser } from '@/lib/server/auth';
 import { jsonError, jsonOk } from '@/lib/server/http';
 import { attachmentToRead } from '@/lib/server/files';
-import { getProjectInOrg, requireOrg } from '@/lib/server/org';
+import { getProjectInOrg, requireOrg, updateProjectInOrg } from '@/lib/server/org';
 import { canManageBriefing } from '@/lib/server/permissions';
 import { projectToReadFresh } from '@/lib/server/serializers';
-import { getProjectRow, primaryMarket, reloadProject } from '@/lib/server/workflow';
+import { primaryMarket, reloadProject } from '@/lib/server/workflow';
 import { getAdminClient } from '@/lib/supabase/admin';
+import { isOpsAdminRole } from '@/types';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -154,18 +154,21 @@ export async function GET(request: NextRequest, context: Ctx) {
 }
 
 export async function PATCH(request: NextRequest, context: Ctx) {
-  const user = await requireUser(request);
-  if (user instanceof Response) return user;
+  const ctx = await requireOrg(request);
+  if (ctx instanceof Response) return ctx;
+
   const { id } = await context.params;
-  const project = await getProjectRow(id);
-  if (!project) return jsonError('Proyecto no encontrado', 404);
+  const scoped = await getProjectInOrg(id, ctx.organizationId);
+  if (scoped.error) return jsonError(scoped.error, 500);
+  if (!scoped.data) return jsonError('Proyecto no encontrado', 404);
+  const project = scoped.data;
+  const user = ctx.user;
 
   const body = (await request.json()) as Record<string, unknown>;
-  const admin = getAdminClient();
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
   if (user.role === 'Diseño') {
-    if (!canManageBriefing(user, project.phase as string)) {
+    if (!canManageBriefing(user, project.phase as string, ctx.config)) {
       return jsonError('No puedes editar el briefing en esta fase', 403);
     }
     if (body.briefing_notes !== undefined) {
@@ -174,7 +177,7 @@ export async function PATCH(request: NextRequest, context: Ctx) {
     } else {
       return jsonError('Solo puedes actualizar las notas del briefing', 403);
     }
-  } else if (user.role !== 'Marketing' && user.role !== 'Admin') {
+  } else if (user.role !== 'Marketing' && !isOpsAdminRole(user.role)) {
     return jsonError('No tienes permisos para editar el proyecto', 403);
   } else {
     for (const field of [
@@ -207,7 +210,8 @@ export async function PATCH(request: NextRequest, context: Ctx) {
     }
   }
 
-  const { error } = await admin.from('projects').update(updates).eq('id', id);
-  if (error) return jsonError(error.message, 500);
+  const result = await updateProjectInOrg(id, ctx.organizationId, updates);
+  if (result.notFound) return jsonError('Proyecto no encontrado', 404);
+  if (result.error) return jsonError(result.error, 500);
   return jsonOk(await reloadProject(id));
 }

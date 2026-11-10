@@ -42,7 +42,7 @@ Abre **http://localhost:3000**
 | `SUPABASE_URL` | Proyecto Supabase |
 | `SUPABASE_ANON_KEY` | Auth |
 | `SUPABASE_SERVICE_ROLE_KEY` | Consultas server-side + Storage |
-| `DEBUG_ENABLE_SIGNUP` | Habilita `/auth/debug/register` |
+| `DEBUG_ENABLE_SIGNUP` | Solo local: habilita `/auth/debug/register` (ignorado en `production`; nunca Admin/Manager) |
 
 ## Estructura
 

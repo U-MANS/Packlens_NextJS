@@ -76,7 +76,7 @@ export interface ProjectBriefing {
   notes?: string;
   /** Proyectos referenciados como inspiración / base del briefing. */
   refs?: { id: string; name: string; sku: string }[];
-  /** @deprecated Legacy single-file fields  mantenidos por compatibilidad */
+  /** @deprecated Legacy single-file fields — mantenidos por compatibilidad */
   fileName?: string;
   fileSizeKb?: number;
   dataUrl?: string;
@@ -287,7 +287,7 @@ export interface ProjectAttachment {
   fileSizeKb: number;
   /** Previsualización (URL firmada de storage o blob). */
   dataUrl: string;
-  /** Descarga autenticada vía API  no expone Supabase. */
+  /** Descarga autenticada vía API — no expone Supabase. */
   downloadUrl?: string;
   isImage: boolean;
   /** true si el archivo es un vídeo */

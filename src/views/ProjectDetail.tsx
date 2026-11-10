@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, NavLink, Routes, Route, Navigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Edit3, Image as ImageIcon, Pencil, Upload, Hash } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Edit3, Image as ImageIcon, Pencil, Tags, Upload, Hash } from 'lucide-react';
 
 import { useAppStore } from '../store/useAppStore';
 import { StatusBadge } from '../components/ui/Badge';
 import { DateInput } from '../components/ui/DateInput';
+import { Modal } from '../components/ui/Modal';
 import { UploadDesignModal } from '../components/modals/UploadDesignModal';
+import { productLines } from '../data/mockSeed';
+import { isOpsAdminRole, type LifecycleStatus } from '../types';
 import {
   isDesignUploadPhase,
   isDesarrolloUploadPhase,
@@ -13,7 +16,99 @@ import {
   suggestNextProposalVersion,
 } from '../utils/phase';
 import { isProjectVisibleToRole } from '../utils/roles';
-import type { LifecycleStatus } from '../types';
+import { TabResumen } from './tabs/TabResumen';
+import { TabDocumentos } from './tabs/TabDocumentos';
+import { TabComparador } from './tabs/TabComparador';
+import { TabTareas } from './tabs/TabTareas';
+import { TabActividad } from './tabs/TabActividad';
+import { TabMetricas } from './tabs/TabMetricas';
+import { TabHoras } from './tabs/TabHoras';
+
+const FORMAT_OPTIONS = [
+  'Tarro vidrio 340g',
+  'Tarro vidrio 640g',
+  'Tarro vidrio 250g',
+  'Tarro Hex 300g',
+  'Bote 350g',
+  'Pack surtidos 8x25g',
+  'Lata 825g',
+  'Brick 1 L',
+  'Botella 1 L',
+];
+
+const CAMPAIGN_TYPE_OPTIONS = [
+  'Spot TV',
+  'RRSS',
+  'Corporativo',
+  'Banner',
+  'Gran formato',
+];
+
+const CUSTOM_OPTION = '__custom__';
+
+/** Select nativo + «Otro…» (evita datalist detrás del modal). */
+function SelectOrCustom({
+  label,
+  value,
+  options,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  options: readonly string[];
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  const [customMode, setCustomMode] = useState(
+    () => value !== '' && !options.includes(value),
+  );
+
+  useEffect(() => {
+    setCustomMode(value !== '' && !options.includes(value));
+  }, [value, options]);
+
+  const selectValue = customMode ? CUSTOM_OPTION : value;
+  const fieldClass =
+    'mt-1 w-full px-3 py-2 border border-border rounded-md text-sm bg-white focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20';
+
+  return (
+    <label className="block text-sm font-medium text-slate-700">
+      {label}
+      <select
+        value={selectValue}
+        onChange={(e) => {
+          const next = e.target.value;
+          if (next === CUSTOM_OPTION) {
+            setCustomMode(true);
+            if (options.includes(value)) onChange('');
+            return;
+          }
+          setCustomMode(false);
+          onChange(next);
+        }}
+        className={fieldClass}
+      >
+        <option value="">Selecciona…</option>
+        {options.map((opt) => (
+          <option key={opt} value={opt}>
+            {opt}
+          </option>
+        ))}
+        <option value={CUSTOM_OPTION}>Otro…</option>
+      </select>
+      {customMode && (
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className={`${fieldClass} mt-2`}
+        />
+      )}
+    </label>
+  );
+}
 
 // --- Lifecycle badge (local, mirrors ProjectList) -----------------------------
 
@@ -38,14 +133,6 @@ const LifecycleBadge = ({ status }: { status: LifecycleStatus | undefined }) => 
   );
 };
 
-import { TabResumen } from './tabs/TabResumen';
-import { TabDocumentos } from './tabs/TabDocumentos';
-import { TabComparador } from './tabs/TabComparador';
-import { TabTareas } from './tabs/TabTareas';
-import { TabActividad } from './tabs/TabActividad';
-import { TabMetricas } from './tabs/TabMetricas';
-import { TabHoras } from './tabs/TabHoras';
-
 const ProjectDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -68,6 +155,8 @@ const ProjectDetail = () => {
   const [editOpen, setEditOpen] = useState(false);
   const [sapModalOpen, setSapModalOpen] = useState(false);
   const [sapInput, setSapInput] = useState('');
+  const [catalogOpen, setCatalogOpen] = useState(false);
+  const [catalogForm, setCatalogForm] = useState({ productLine: '', format: '' });
   const [editForm, setEditForm] = useState({
     name: '',
     description: '',
@@ -76,6 +165,8 @@ const ProjectDetail = () => {
     artDeadline: '',
     designLead: '',
     regulatoryContact: '',
+    productLine: '',
+    format: '',
   });
   const projectProposals = useMemo(
     () => designProposals.filter((d) => d.projectId === id),
@@ -163,10 +254,15 @@ const ProjectDetail = () => {
     (activeRole === 'Diseño' || activeRole === 'Admin' || activeRole === 'Manager') &&
     isDesarrolloUploadPhase(project.phase);
   const canShowDesignUpload = canShowDesignProposalUpload || canShowDesarrolloUpload;
+  const isReadOnlyApproved =
+    project.phase === 'Aprobado' || project.status === 'Aprobado' || Boolean(project.discontinued);
+  const canManageCatalog =
+    activeRole === 'Marketing' || isOpsAdminRole(activeRole);
   const canEditProject =
-    activeRole === 'Marketing' || activeRole === 'Admin' || activeRole === 'Manager';
-
+    !isReadOnlyApproved &&
+    (activeRole === 'Marketing' || isOpsAdminRole(activeRole));
   const openEditModal = () => {
+    if (isReadOnlyApproved) return;
     setEditForm({
       name: project.name,
       description: project.description ?? '',
@@ -175,8 +271,27 @@ const ProjectDetail = () => {
       artDeadline: project.artDeadline ?? '',
       designLead: project.designLead ?? '',
       regulatoryContact: project.regulatoryContact ?? '',
+      productLine: project.productLine ?? '',
+      format: project.format ?? '',
     });
     setEditOpen(true);
+  };
+
+  const openCatalogModal = () => {
+    if (!canManageCatalog) return;
+    setCatalogForm({
+      productLine: project.productLine ?? '',
+      format: project.format ?? '',
+    });
+    setCatalogOpen(true);
+  };
+
+  const saveCatalog = () => {
+    void updateProject(project.id, {
+      productLine: catalogForm.productLine.trim(),
+      format: catalogForm.format.trim(),
+    });
+    setCatalogOpen(false);
   };
 
   const isAvFlow = project.flowType === 'Campaña audiovisual';
@@ -192,9 +307,9 @@ const ProjectDetail = () => {
           : 'Subir propuesta de diseño';
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-w-0">
       {/* Detail Header */}
-      <div className="bg-surface border-b border-border px-8 pt-8 pb-0 shrink-0">
+      <div className="bg-surface border-b border-border px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 pb-0 shrink-0 min-w-0">
         <button
           onClick={() => navigate('/projects')}
           className="flex items-center gap-2 text-sm text-slate-500 hover:text-primary transition-colors mb-4"
@@ -202,18 +317,77 @@ const ProjectDetail = () => {
           <ArrowLeft size={16} /> Volver a proyectos
         </button>
 
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-6">
-          <div>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-6 min-w-0">
+          <div className="min-w-0 w-full">
             <div className="flex items-center gap-3 mb-1 flex-wrap">
-              <h1 className="text-2xl font-bold text-primary">{project.name}</h1>
+              <h1 className="text-xl sm:text-2xl font-bold text-primary break-words">{project.name}</h1>
               <StatusBadge status={project.status} />
               <LifecycleBadge status={project.lifecycleStatus} />
             </div>
-            <p className="text-slate-500 text-sm flex items-center flex-wrap gap-x-0">
+            {project.productLine || project.format ? (
+              <p className="text-sm text-slate-600 mt-1 flex items-center flex-wrap gap-2">
+                <span>
+                  {project.productLine && (
+                    <span>
+                      <span className="text-slate-400">Gama</span> {project.productLine}
+                    </span>
+                  )}
+                  {project.productLine && project.format && (
+                    <span className="mx-2 text-slate-300">·</span>
+                  )}
+                  {project.format && (
+                    <span>
+                      <span className="text-slate-400">
+                        {isAvFlow ? 'Tipo' : 'Formato'}
+                      </span>{' '}
+                      {project.format}
+                    </span>
+                  )}
+                  {!project.productLine && (
+                    <span className="text-slate-400 italic">Sin gama</span>
+                  )}
+                  {project.productLine && !project.format && (
+                    <>
+                      <span className="mx-2 text-slate-300">·</span>
+                      <span className="text-slate-400 italic">
+                        Sin {isAvFlow ? 'tipo' : 'formato'}
+                      </span>
+                    </>
+                  )}
+                </span>
+                {canManageCatalog && (
+                  <button
+                    type="button"
+                    onClick={openCatalogModal}
+                    className="inline-flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-accent transition-colors"
+                    title="Editar gama y formato"
+                  >
+                    <Pencil size={11} />
+                  </button>
+                )}
+              </p>
+            ) : canManageCatalog ? (
+              <button
+                type="button"
+                onClick={openCatalogModal}
+                className="mt-1 inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-accent border border-dashed border-slate-300 hover:border-accent/50 hover:bg-accent/5 px-2.5 py-1 rounded-md transition-colors"
+              >
+                <Tags size={12} /> Asignar gama y formato
+              </button>
+            ) : (
+              <p className="text-sm text-slate-400 mt-1 italic">Sin gama ni formato</p>
+            )}
+            <p className="text-slate-500 text-sm flex items-center flex-wrap gap-x-0 mt-1">
               <span className="font-mono">{project.sku}</span>
-              <span className="mx-2 text-slate-300"></span>
+              {typeof project.version === 'number' && (
+                <>
+                  <span className="mx-2 text-slate-300">·</span>
+                  <span>v{project.version}</span>
+                </>
+              )}
+              <span className="mx-2 text-slate-300">·</span>
               Mercados: {marketsLabel}
-              <span className="mx-2 text-slate-300"></span>
+              <span className="mx-2 text-slate-300">·</span>
               Responsable:{' '}
               {project.marketingAssigneeType === 'agent' && project.marketingAgentName
                 ? `${project.marketingAgentName} (Agente)`
@@ -221,7 +395,7 @@ const ProjectDetail = () => {
               {(project.regulatoryAssigneeType === 'agent' && project.regulatoryAgentName) ||
               project.regulatoryContact ? (
                 <>
-                  <span className="mx-2 text-slate-300"></span>
+                  <span className="mx-2 text-slate-300">·</span>
                   I+D:{' '}
                   {project.regulatoryAssigneeType === 'agent' && project.regulatoryAgentName
                     ? `${project.regulatoryAgentName} (Agente)`
@@ -360,14 +534,14 @@ const ProjectDetail = () => {
         </div>
 
         {/* Tabs Navigation */}
-        <div className="flex space-x-8">
+        <div className="flex gap-6 sm:gap-8 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
           {tabs.map((tab) => (
             <NavLink
               key={tab.name}
               to={tab.path ? `${baseUrl}/${tab.path}` : baseUrl}
               end={tab.path === ''}
               className={({ isActive }) =>
-                `pb-4 text-sm font-medium border-b-2 transition-colors ${
+                `pb-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap shrink-0 ${
                   isActive
                     ? 'border-accent text-accent'
                     : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
@@ -381,8 +555,8 @@ const ProjectDetail = () => {
       </div>
 
       {/* Tab Content Area */}
-      <div className="flex-1 overflow-auto p-8">
-        <div className="max-w-5xl mx-auto">
+      <div className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8 min-w-0">
+        <div className="max-w-5xl mx-auto min-w-0">
           <Routes>
             <Route
               index
@@ -414,115 +588,173 @@ const ProjectDetail = () => {
         onClose={() => setUploadOpen(false)}
       />
 
-      {/* Edit project modal (Marketing / Admin) */}
-      {editOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
-          onClick={(e) => { if (e.target === e.currentTarget) setEditOpen(false); }}
-        >
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6 space-y-4">
-            <div>
-              <h2 className="text-lg font-semibold text-primary">Editar proyecto</h2>
-              <p className="text-sm text-slate-500 mt-1">
-                Actualiza los datos del briefing y la asignación de equipo.
-              </p>
-            </div>
-            <div className="space-y-3">
-              <label className="block text-sm font-medium text-slate-700">
-                Nombre
-                <input
-                  type="text"
-                  value={editForm.name}
-                  onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
-                  className="mt-1 w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
-                />
-              </label>
-              <label className="block text-sm font-medium text-slate-700">
-                Descripción
-                <textarea
-                  rows={3}
-                  value={editForm.description}
-                  onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
-                  className="mt-1 w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 resize-none"
-                />
-              </label>
-              <label className="block text-sm font-medium text-slate-700">
-                Notas de briefing
-                <textarea
-                  rows={3}
-                  value={editForm.briefingNotes}
-                  onChange={(e) => setEditForm((f) => ({ ...f, briefingNotes: e.target.value }))}
-                  className="mt-1 w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 resize-none"
-                />
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                <label className="block text-sm font-medium text-slate-700">
-                  Fecha lanzamiento
-                  <DateInput
-                    value={editForm.launchDate}
-                    onChange={(launchDate) => setEditForm((f) => ({ ...f, launchDate }))}
-                    className="mt-1 w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
-                  />
-                </label>
-                <label className="block text-sm font-medium text-slate-700">
-                  Fecha límite arte
-                  <DateInput
-                    value={editForm.artDeadline}
-                    onChange={(artDeadline) => setEditForm((f) => ({ ...f, artDeadline }))}
-                    className="mt-1 w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
-                  />
-                </label>
-              </div>
-              <label className="block text-sm font-medium text-slate-700">
-                Responsable de diseño
-                <input
-                  type="text"
-                  value={editForm.designLead}
-                  onChange={(e) => setEditForm((f) => ({ ...f, designLead: e.target.value }))}
-                  className="mt-1 w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
-                />
-              </label>
-              <label className="block text-sm font-medium text-slate-700">
-                Contacto I+D y Calidad
-                <input
-                  type="text"
-                  value={editForm.regulatoryContact}
-                  onChange={(e) => setEditForm((f) => ({ ...f, regulatoryContact: e.target.value }))}
-                  className="mt-1 w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
-                />
-              </label>
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setEditOpen(false)}
-                className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-primary border border-border rounded-md hover:bg-slate-50 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                disabled={!editForm.name.trim()}
-                onClick={() => {
-                  void updateProject(project.id, {
-                    name: editForm.name.trim(),
-                    description: editForm.description.trim(),
-                    briefingNotes: editForm.briefingNotes,
-                    launchDate: editForm.launchDate || undefined,
-                    artDeadline: editForm.artDeadline || undefined,
-                    designLead: editForm.designLead.trim() || undefined,
-                    regulatoryContact: editForm.regulatoryContact.trim() || undefined,
-                  });
-                  setEditOpen(false);
-                }}
-                className="px-4 py-2 text-sm font-semibold rounded-md bg-accent text-white hover:bg-accent/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                Guardar cambios
-              </button>
-            </div>
+      <Modal
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
+        title="Editar proyecto"
+        description="Actualiza los datos del briefing y la asignación de equipo."
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setEditOpen(false)}
+              className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-primary border border-border rounded-md hover:bg-slate-50 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              disabled={!editForm.name.trim()}
+              onClick={() => {
+                void updateProject(project.id, {
+                  name: editForm.name.trim(),
+                  description: editForm.description.trim(),
+                  briefingNotes: editForm.briefingNotes,
+                  productLine: editForm.productLine.trim(),
+                  format: editForm.format.trim(),
+                  launchDate: editForm.launchDate || undefined,
+                  artDeadline: editForm.artDeadline || undefined,
+                  designLead: editForm.designLead.trim() || undefined,
+                  regulatoryContact: editForm.regulatoryContact.trim() || undefined,
+                });
+                setEditOpen(false);
+              }}
+              className="px-4 py-2 text-sm font-semibold rounded-md bg-accent text-white hover:bg-accent/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Guardar cambios
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <label className="block text-sm font-medium text-slate-700">
+            Nombre
+            <input
+              type="text"
+              value={editForm.name}
+              onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+              className="mt-1 w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
+            />
+          </label>
+          <label className="block text-sm font-medium text-slate-700">
+            Descripción
+            <textarea
+              rows={3}
+              value={editForm.description}
+              onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
+              className="mt-1 w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 resize-none"
+            />
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <SelectOrCustom
+              label="Gama"
+              value={editForm.productLine}
+              options={productLines}
+              onChange={(productLine) => setEditForm((f) => ({ ...f, productLine }))}
+              placeholder="Ej. Bebidas vegetales"
+            />
+            <SelectOrCustom
+              label={isAvFlow ? 'Tipo de campaña' : 'Formato'}
+              value={editForm.format}
+              options={isAvFlow ? CAMPAIGN_TYPE_OPTIONS : FORMAT_OPTIONS}
+              onChange={(format) => setEditForm((f) => ({ ...f, format }))}
+              placeholder={isAvFlow ? 'Ej. Spot TV' : 'Ej. Brick 1 L'}
+            />
           </div>
+          <label className="block text-sm font-medium text-slate-700">
+            Notas de briefing
+            <textarea
+              rows={3}
+              value={editForm.briefingNotes}
+              onChange={(e) => setEditForm((f) => ({ ...f, briefingNotes: e.target.value }))}
+              className="mt-1 w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 resize-none"
+            />
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="block text-sm font-medium text-slate-700">
+              Fecha lanzamiento
+              <DateInput
+                value={editForm.launchDate}
+                onChange={(launchDate) => setEditForm((f) => ({ ...f, launchDate }))}
+                className="mt-1 w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
+              />
+            </label>
+            <label className="block text-sm font-medium text-slate-700">
+              Fecha límite arte
+              <DateInput
+                value={editForm.artDeadline}
+                onChange={(artDeadline) => setEditForm((f) => ({ ...f, artDeadline }))}
+                className="mt-1 w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
+              />
+            </label>
+          </div>
+          <label className="block text-sm font-medium text-slate-700">
+            Responsable de diseño
+            <input
+              type="text"
+              value={editForm.designLead}
+              onChange={(e) => setEditForm((f) => ({ ...f, designLead: e.target.value }))}
+              className="mt-1 w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
+            />
+          </label>
+          <label className="block text-sm font-medium text-slate-700">
+            Contacto I+D y Calidad
+            <input
+              type="text"
+              value={editForm.regulatoryContact}
+              onChange={(e) => setEditForm((f) => ({ ...f, regulatoryContact: e.target.value }))}
+              className="mt-1 w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
+            />
+          </label>
         </div>
-      )}
+      </Modal>
+
+      <Modal
+        open={catalogOpen}
+        onClose={() => setCatalogOpen(false)}
+        title={
+          project.productLine || project.format
+            ? 'Editar gama y formato'
+            : 'Asignar gama y formato'
+        }
+        description="Solo Marketing, Manager y Admin pueden actualizar estos datos de catálogo."
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setCatalogOpen(false)}
+              className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-primary border border-border rounded-md hover:bg-slate-50 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              disabled={!catalogForm.productLine.trim() && !catalogForm.format.trim()}
+              onClick={saveCatalog}
+              className="px-4 py-2 text-sm font-semibold rounded-md bg-accent text-white hover:bg-accent/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Guardar
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <SelectOrCustom
+            label="Gama"
+            value={catalogForm.productLine}
+            options={productLines}
+            onChange={(productLine) => setCatalogForm((f) => ({ ...f, productLine }))}
+            placeholder="Ej. Bebidas vegetales"
+          />
+          <SelectOrCustom
+            label={isAvFlow ? 'Tipo de campaña' : 'Formato'}
+            value={catalogForm.format}
+            options={isAvFlow ? CAMPAIGN_TYPE_OPTIONS : FORMAT_OPTIONS}
+            onChange={(format) => setCatalogForm((f) => ({ ...f, format }))}
+            placeholder={isAvFlow ? 'Ej. Spot TV' : 'Ej. Brick 1 L'}
+          />
+        </div>
+      </Modal>
 
       {/* SAP Code Modal */}
       {sapModalOpen && (

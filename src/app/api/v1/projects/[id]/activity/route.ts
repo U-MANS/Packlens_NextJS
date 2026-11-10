@@ -1,14 +1,19 @@
 import { NextRequest } from 'next/server';
-import { requireUser } from '@/lib/server/auth';
 import { jsonError, jsonOk } from '@/lib/server/http';
+import { getProjectInOrg, requireOrg } from '@/lib/server/org';
 import { getAdminClient } from '@/lib/supabase/admin';
 
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function GET(request: NextRequest, context: Ctx) {
-  const user = await requireUser(request);
-  if (user instanceof Response) return user;
+  const ctx = await requireOrg(request);
+  if (ctx instanceof Response) return ctx;
+
   const { id } = await context.params;
+  const scoped = await getProjectInOrg(id, ctx.organizationId, 'id');
+  if (scoped.error) return jsonError(scoped.error, 500);
+  if (!scoped.data) return jsonError('Proyecto no encontrado', 404);
+
   const url = new URL(request.url);
   const offset = Number(url.searchParams.get('offset') ?? '0');
   const limit = Number(url.searchParams.get('limit') ?? '50');
@@ -16,7 +21,9 @@ export async function GET(request: NextRequest, context: Ctx) {
   const admin = getAdminClient();
   const { data, error } = await admin
     .from('activity_events')
-    .select('*, actor:users!activity_events_actor_id_fkey(name), replies:activity_replies(*, author:users!activity_replies_author_id_fkey(name))')
+    .select(
+      '*, actor:users!activity_events_actor_id_fkey(name), replies:activity_replies(*, author:users!activity_replies_author_id_fkey(name))'
+    )
     .eq('project_id', id)
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1);

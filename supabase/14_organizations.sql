@@ -93,4 +93,6 @@ exception when others then
   raise notice 'No se pudo forzar NOT NULL en projects.organization_id: %', SQLERRM;
 end $$;
 
+-- RLS / grants: ejecutar a continuación supabase/15_rls_organizations.sql
+
 notify pgrst, 'reload schema';

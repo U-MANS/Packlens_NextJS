@@ -561,7 +561,7 @@ const DesignPhaseView: React.FC<DesignPhaseProps> = ({ projectId, onPreviewImage
                   </span>
                 </p>
               ) : (
-                <p className="font-medium text-primary">{project.owner || ''}</p>
+                <p className="font-medium text-primary">{project.owner || '—'}</p>
               )}
             </div>
             {(project.regulatoryAssigneeType === 'agent' && project.regulatoryAgentName) ||
@@ -1321,7 +1321,7 @@ const ReviewPhaseView: React.FC<ReviewPhaseViewProps> = ({
                 Si cualquiera rechaza, el proyecto vuelve a Creación Desarrollo.
                 {parallelSiblingApproved && (
                   <span className="block mt-1 text-emerald-700">
-                    La otra vía ya está aprobada  al aprobar esta se avanzará a Arte
+                    La otra vía ya está aprobada — al aprobar esta se avanzará a Arte
                     final.
                   </span>
                 )}
@@ -1579,7 +1579,7 @@ const ReviewPhaseView: React.FC<ReviewPhaseViewProps> = ({
         </Card>
       )}
 
-      {/* Acciones  solo roles autorizados para esta fase / vía */}
+      {/* Acciones — solo roles autorizados para esta fase / vía */}
       {canAct && (
         <Card>
           <CardContent className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -1923,7 +1923,7 @@ const FinalPrepView: React.FC<FinalPrepViewProps> = ({
         </Card>
       )}
 
-      {/* Acciones  solo Diseño */}
+      {/* Acciones — solo Diseño */}
       {canEdit && (
         <Card>
           <CardContent className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -2032,7 +2032,7 @@ const DesarrolloPhaseView: React.FC<DesarrolloPhaseViewProps> = ({
             </p>
             <p className="text-xs text-slate-500 mt-1">
               {desarrolloProposal
-                ? `"${desarrolloProposal.name}" (${desarrolloProposal.version})  enviado a Validación y Aprobación Legal (en paralelo)`
+                ? `"${desarrolloProposal.name}" (${desarrolloProposal.version}) — enviado a Validación y Aprobación Legal (en paralelo)`
                 : isCurrent
                   ? 'Usa el botón «Subir archivo de desarrollo» en la cabecera para adjuntar el archivo técnico.'
                   : ''}

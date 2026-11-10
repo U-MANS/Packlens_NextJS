@@ -2,9 +2,18 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import * as api from '../api';
 import type { ApiUser } from '../api/mappers';
-import { setTokenRefreshHandler, ApiError, setActiveOrganizationId } from '../api/client';
+import {
+  setTokenRefreshHandler,
+  resetTokenRefreshGate,
+  ApiError,
+  setActiveOrganizationId,
+} from '../api/client';
 import type { TenantConfig } from '../lib/tenant/types';
 import type { Role } from '../types';
+import {
+  bindLocalCampaignsScope,
+  clearLocalCampaignsScope,
+} from './useLocalCampaignsStore';
 
 export interface AuthUser {
   id: string;
@@ -80,6 +89,10 @@ function applyMeToState(me: ApiUser) {
   };
 }
 
+function syncLocalCampaignsScope(userId: string | null | undefined, organizationId: string | null | undefined) {
+  void bindLocalCampaignsScope(userId, organizationId);
+}
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
@@ -96,21 +109,28 @@ export const useAuthStore = create<AuthState>()(
       error: null,
 
       applyMe: (me) => {
-        set(applyMeToState(me));
+        const next = applyMeToState(me);
+        set(next);
+        syncLocalCampaignsScope(next.user.id, next.organization?.id);
       },
 
       login: async (email, password) => {
         set({ isLoading: true, error: null });
         try {
           const tokens = await api.login(email, password);
+          resetTokenRefreshGate();
           set({
             accessToken: tokens.access_token,
             refreshToken: tokens.refresh_token,
           });
           const me = await api.getMe();
-          set({ ...applyMeToState(me), isLoading: false });
+          const next = applyMeToState(me);
+          set({ ...next, isLoading: false });
+          syncLocalCampaignsScope(next.user.id, next.organization?.id);
         } catch (e) {
           const msg = e instanceof Error ? e.message : 'Error de autenticación';
+          void clearLocalCampaignsScope();
+          resetTokenRefreshGate();
           set({
             isLoading: false,
             error: msg,
@@ -131,14 +151,19 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true, error: null });
         try {
           const tokens = await api.debugRegister(payload);
+          resetTokenRefreshGate();
           set({
             accessToken: tokens.access_token,
             refreshToken: tokens.refresh_token,
           });
           const me = await api.getMe();
-          set({ ...applyMeToState(me), isLoading: false });
+          const next = applyMeToState(me);
+          set({ ...next, isLoading: false });
+          syncLocalCampaignsScope(next.user.id, next.organization?.id);
         } catch (e) {
           const msg = e instanceof Error ? e.message : 'Error al registrar';
+          void clearLocalCampaignsScope();
+          resetTokenRefreshGate();
           set({
             isLoading: false,
             error: msg,
@@ -159,14 +184,19 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true, error: null });
         try {
           const tokens = await api.acceptInvite(token, payload);
+          resetTokenRefreshGate();
           set({
             accessToken: tokens.access_token,
             refreshToken: tokens.refresh_token,
           });
           const me = await api.getMe();
-          set({ ...applyMeToState(me), isLoading: false });
+          const next = applyMeToState(me);
+          set({ ...next, isLoading: false });
+          syncLocalCampaignsScope(next.user.id, next.organization?.id);
         } catch (e) {
           const msg = e instanceof Error ? e.message : 'Error al aceptar invitación';
+          void clearLocalCampaignsScope();
+          resetTokenRefreshGate();
           set({
             isLoading: false,
             error: msg,
@@ -191,6 +221,8 @@ export const useAuthStore = create<AuthState>()(
           // ignore
         }
         setActiveOrganizationId(null);
+        void clearLocalCampaignsScope();
+        resetTokenRefreshGate();
         set({
           accessToken: null,
           refreshToken: null,
@@ -206,6 +238,7 @@ export const useAuthStore = create<AuthState>()(
       restoreSession: async () => {
         const { accessToken, refreshToken } = get();
         if (!accessToken && !refreshToken) {
+          void clearLocalCampaignsScope();
           set({ isHydrated: true });
           return false;
         }
@@ -214,11 +247,13 @@ export const useAuthStore = create<AuthState>()(
           if (accessToken) {
             try {
               const me = await api.getMe();
+              const next = applyMeToState(me);
               set({
-                ...applyMeToState(me),
+                ...next,
                 isLoading: false,
                 isHydrated: true,
               });
+              syncLocalCampaignsScope(next.user.id, next.organization?.id);
               return true;
             } catch (e) {
               const expired =
@@ -234,17 +269,21 @@ export const useAuthStore = create<AuthState>()(
               refreshToken: tokens.refresh_token,
             });
             const me = await api.getMe();
+            const next = applyMeToState(me);
             set({
-              ...applyMeToState(me),
+              ...next,
               isLoading: false,
               isHydrated: true,
             });
+            syncLocalCampaignsScope(next.user.id, next.organization?.id);
             return true;
           }
 
           throw new Error('Sin sesión válida');
         } catch {
           setActiveOrganizationId(null);
+          void clearLocalCampaignsScope();
+          resetTokenRefreshGate();
           set({
             accessToken: null,
             refreshToken: null,
@@ -272,7 +311,9 @@ export const useAuthStore = create<AuthState>()(
       setOrganizationId: async (id: string) => {
         setActiveOrganizationId(id);
         const me = await api.getMe();
-        set(applyMeToState(me));
+        const next = applyMeToState(me);
+        set(next);
+        syncLocalCampaignsScope(next.user.id, next.organization?.id);
         // Forzar recarga de proyectos/datos del tenant activo
         const { useAppStore } = await import('./useAppStore');
         useAppStore.setState({ isBootstrapped: false });

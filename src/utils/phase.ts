@@ -371,14 +371,14 @@ export const hasPassedDesignApproval = (phase: ProjectPhase, flowType?: string |
 export const PHASE_TOAST: Record<string, { msg: string; dept: string }> = {
   'Diseño': {
     msg: 'Arte devuelto a Diseño',
-    dept: 'Equipo de Diseño  se han solicitado cambios',
+    dept: 'Equipo de Diseño — se han solicitado cambios',
   },
   'Aprobación Diseño': {
     msg: 'Propuesta enviada a Aprobación de Diseño',
     dept: 'Equipo de Marketing',
   },
   'Creación Desarrollo': {
-    msg: 'Diseño aprobado  iniciar Creación de Desarrollo',
+    msg: 'Diseño aprobado — iniciar Creación de Desarrollo',
     dept: 'Equipo de Diseño',
   },
   'Validación diseño': {
@@ -390,7 +390,7 @@ export const PHASE_TOAST: Record<string, { msg: string; dept: string }> = {
     dept: 'Departamento Legal (I+D)',
   },
   'Arte final': {
-    msg: 'Validación y Legal aprobados  subir Arte Final',
+    msg: 'Validación y Legal aprobados — subir Arte Final',
     dept: 'Equipo de Diseño',
   },
   'Aprobación final': {

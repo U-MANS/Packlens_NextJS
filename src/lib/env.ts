@@ -16,7 +16,12 @@ export const env = {
   supabaseServiceRoleKey: () =>
     required('SUPABASE_SERVICE_ROLE_KEY', process.env.SUPABASE_SERVICE_ROLE_KEY),
   storageBucket: () => process.env.SUPABASE_STORAGE_BUCKET ?? 'packlens-files',
-  debugSignup: () => process.env.DEBUG_ENABLE_SIGNUP === 'true',
+  /**
+   * Alta pública de debug. Nunca en production.
+   * Requiere DEBUG_ENABLE_SIGNUP=true explícito y NODE_ENV !== 'production'.
+   */
+  debugSignup: () =>
+    process.env.NODE_ENV !== 'production' && process.env.DEBUG_ENABLE_SIGNUP === 'true',
   openaiApiKey: () => process.env.OPENAI_API_KEY || '',
   frontendBaseUrl: () => (process.env.FRONTEND_BASE_URL || 'http://localhost:3000').replace(/\/$/, ''),
   brevoApiKey: () => process.env.BREVO_API_KEY?.trim() || '',

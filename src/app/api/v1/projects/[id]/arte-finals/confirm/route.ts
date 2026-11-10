@@ -1,12 +1,19 @@
 import { NextRequest } from 'next/server';
 import { requireUser } from '@/lib/server/auth';
 import { jsonError, jsonOk } from '@/lib/server/http';
-import { attachmentToRead, createAttachmentFromMeta } from '@/lib/server/files';
+import {
+  attachmentToRead,
+  consumeUploadReservation,
+  createAttachmentFromMeta,
+  getStorageObjectMeta,
+} from '@/lib/server/files';
 import { canUploadArteFinal } from '@/lib/server/permissions';
 import { addActivity, getProjectRow } from '@/lib/server/workflow';
 import { getAdminClient } from '@/lib/supabase/admin';
 
 type Ctx = { params: Promise<{ id: string }> };
+
+const ARTE_FINAL_KEY_PREFIX = (projectId: string) => `projects/${projectId}/arte-final/`;
 
 export async function POST(request: NextRequest, context: Ctx) {
   const user = await requireUser(request);
@@ -24,15 +31,52 @@ export async function POST(request: NextRequest, context: Ctx) {
     mime_type?: string;
     file_size?: number;
   };
-  if (!body.storage_key || !body.file_name) {
-    return jsonError('storage_key y file_name requeridos', 400);
+  if (!body.storage_key) {
+    return jsonError('storage_key requerido', 400);
   }
+
+  const prefix = ARTE_FINAL_KEY_PREFIX(id);
+  if (!body.storage_key.startsWith(prefix)) {
+    return jsonError('storage_key no pertenece a este proyecto', 400);
+  }
+
+  let reservation;
+  try {
+    reservation = await consumeUploadReservation({
+      storage_key: body.storage_key,
+      project_id: id,
+      user_id: user.id,
+      purpose: 'arte_final',
+    });
+  } catch (e) {
+    return jsonError(e instanceof Error ? e.message : 'Error validando reserva', 500);
+  }
+  if (!reservation) {
+    return jsonError('Reserva de subida inválida, expirada o ya usada', 409);
+  }
+
+  let objectMeta;
+  try {
+    objectMeta = await getStorageObjectMeta(body.storage_key);
+  } catch {
+    return jsonError('El archivo no existe en Storage; sube antes de confirmar', 400);
+  }
+
+  const fileName = reservation.file_name || body.file_name;
+  if (!fileName) {
+    return jsonError('file_name no disponible en la reserva', 400);
+  }
+
+  const mimeType =
+    objectMeta.contentType ||
+    reservation.mime_type ||
+    'application/octet-stream';
 
   const att = await createAttachmentFromMeta({
     storage_key: body.storage_key,
-    file_name: body.file_name,
-    mime_type: body.mime_type || 'application/zip',
-    file_size: body.file_size || 0,
+    file_name: fileName,
+    mime_type: mimeType,
+    file_size: objectMeta.size,
   });
 
   const admin = getAdminClient();

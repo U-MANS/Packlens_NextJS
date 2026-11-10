@@ -162,8 +162,8 @@ function RoleSelect({ user, disabled, roles = ALL_DEPTS, onChange }: RoleSelectP
         disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-label={`Rol de ${user.name}`}
-        title="Cambiar rol"
+        aria-label={`Permiso de acceso de ${user.name}`}
+        title="Cambiar permiso de acceso"
         onClick={() => setOpen((v) => !v)}
         className={`inline-flex items-center gap-1.5 pl-2.5 pr-2 py-1 rounded-full border text-xs font-semibold transition-colors disabled:opacity-60 disabled:cursor-wait ${
           DEPT_COLORS[user.role]
@@ -179,7 +179,7 @@ function RoleSelect({ user, disabled, roles = ALL_DEPTS, onChange }: RoleSelectP
             ref={menuRef}
             style={style}
             role="listbox"
-            aria-label="Seleccionar rol"
+            aria-label="Seleccionar permiso de acceso"
             className="w-44 bg-surface border border-border rounded-xl shadow-lg py-1.5"
             onClick={(e) => e.stopPropagation()}
           >
@@ -271,7 +271,7 @@ function UserRowMenu({
       className="w-52 bg-surface border border-border rounded-xl shadow-lg py-1.5"
       onClick={(e) => e.stopPropagation()}
     >
-      {item(<UserCog size={15} className="text-slate-400" />, 'Cambiar rol', () => onOpenRoleModal(user))}
+      {item(<UserCog size={15} className="text-slate-400" />, 'Cambiar permiso de acceso', () => onOpenRoleModal(user))}
       <div className="border-t border-border my-1" />
       {user.status === 'Activo'
         ? item(
@@ -462,7 +462,7 @@ export default function Users() {
             <h1 className="text-2xl font-bold text-primary">Usuarios</h1>
             <p className="text-sm text-slate-500 mt-1">
               {isAdmin
-                ? `Gestión del equipo · ${users.length} usuarios · ${onlineCount} en línea · puedes cambiar roles desde la columna Departamento`
+                ? `Gestión del equipo · ${users.length} usuarios · ${onlineCount} en línea · puedes cambiar el permiso de acceso desde la columna correspondiente`
                 : `Directorio del equipo · ${users.length} usuarios · ${onlineCount} en línea`}
             </p>
           </div>
@@ -561,7 +561,7 @@ export default function Users() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
             <input
               type="text"
-              placeholder="Buscar por nombre, email o departamento"
+              placeholder="Buscar por nombre, email o permiso de acceso…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-9 pr-4 py-2.5 bg-white border border-border rounded-lg text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 transition-all"
@@ -597,7 +597,7 @@ export default function Users() {
                       <th className="px-5 py-3" aria-hidden />
                       <th className="px-4 py-3 font-semibold">Nombre</th>
                       <th className="px-4 py-3 font-semibold">Correo</th>
-                      <th className="px-4 py-3 font-semibold">Departamento</th>
+                      <th className="px-4 py-3 font-semibold">Permiso de acceso</th>
                       <th className="px-4 py-3 font-semibold">Presencia</th>
                       {isAdmin && <th className="px-4 py-3" aria-label="Acciones" />}
                     </tr>
@@ -796,7 +796,7 @@ export default function Users() {
           </div>
           <div>
             <label htmlFor="user-role" className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
-              Rol / departamento
+              Permiso de acceso
             </label>
             <select
               id="user-role"
@@ -819,8 +819,8 @@ export default function Users() {
         onClose={() => {
           if (!isSavingRole) setRoleModalUser(null);
         }}
-        title="Cambiar rol"
-        description={roleModalUser ? `Actualizar el departamento de ${roleModalUser.name}` : undefined}
+        title="Cambiar permiso de acceso"
+        description={roleModalUser ? `Actualizar el permiso de acceso de ${roleModalUser.name}` : undefined}
         footer={
           <div className="flex justify-end gap-2">
             <button
@@ -844,7 +844,7 @@ export default function Users() {
       >
         <div>
           <label htmlFor="edit-user-role" className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
-            Rol / departamento
+            Permiso de acceso
           </label>
           <select
             id="edit-user-role"
