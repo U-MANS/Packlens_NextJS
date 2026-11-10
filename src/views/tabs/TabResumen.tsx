@@ -285,7 +285,7 @@ const Pipeline: React.FC<PipelineProps> = ({
                 </span>
               </button>
 
-              {/* Conector vertical: el flujo horizontal lo corta a mitad → lectura en paralelo */}
+              {/* Conector vertical: el flujo horizontal lo corta a mitad ? lectura en paralelo */}
               <span
                 className={`w-0.5 h-4 my-0.5 shrink-0 ${
                   inParallel || pastParallelGate ? 'bg-accent/50' : 'bg-slate-200'
@@ -561,7 +561,7 @@ const DesignPhaseView: React.FC<DesignPhaseProps> = ({ projectId, onPreviewImage
                   </span>
                 </p>
               ) : (
-                <p className="font-medium text-primary">{project.owner || '—'}</p>
+                <p className="font-medium text-primary">{project.owner || ''}</p>
               )}
             </div>
             {(project.regulatoryAssigneeType === 'agent' && project.regulatoryAgentName) ||
@@ -831,7 +831,7 @@ const DesignPhaseView: React.FC<DesignPhaseProps> = ({ projectId, onPreviewImage
                 )}
                 <span>
                   <span className="text-accent font-medium">
-                    {uploadingBriefing ? 'Subiendo…' : 'Añadir archivos'}
+                    {uploadingBriefing ? 'Subiendo' : 'Añadir archivos'}
                   </span>
                   {' '}· PDF, AI, PNG, JPG
                 </span>
@@ -852,7 +852,7 @@ const DesignPhaseView: React.FC<DesignPhaseProps> = ({ projectId, onPreviewImage
                   value={briefingNotes}
                   onChange={(e) => setBriefingNotes(e.target.value)}
                   rows={3}
-                  placeholder="Claims, referencias visuales, restricciones normativas, contexto del rediseño…"
+                  placeholder="Claims, referencias visuales, restricciones normativas, contexto del rediseño"
                   className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 resize-none"
                 />
                 <div className="flex justify-end">
@@ -864,7 +864,7 @@ const DesignPhaseView: React.FC<DesignPhaseProps> = ({ projectId, onPreviewImage
                   >
                     {savingNotes ? (
                       <>
-                        <Loader2 size={12} className="animate-spin" /> Guardando…
+                        <Loader2 size={12} className="animate-spin" /> Guardando
                       </>
                     ) : (
                       'Guardar notas'
@@ -1175,7 +1175,7 @@ const AttachmentGallery: React.FC<AttachmentGalleryProps> = ({
                 />
                 <span className="absolute inset-0 flex items-center justify-center">
                   <span className="w-10 h-10 rounded-full bg-black/55 text-white flex items-center justify-center text-xs font-semibold">
-                    ▶
+                    ?
                   </span>
                 </span>
                 <span className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-slate-900/80 to-transparent px-2 py-2 text-[11px] text-white truncate">
@@ -1253,7 +1253,7 @@ interface ReviewPhaseViewProps {
   arteFinal?: ArteFinal;
   activeRole: string;
   canAddDesignFiles?: boolean;
-  /** Rechazo de la fase siguiente que devolvió el proyecto aquí (p. ej. Legal → Validación diseño). */
+  /** Rechazo de la fase siguiente que devolvió el proyecto aquí (p. ej. Legal ? Validación diseño). */
   pendingIncomingRejection?: PhaseAction;
   flowType?: string | null;
   /** Esta vía del gate paralelo ya está aprobada en el ciclo actual. */
@@ -1321,7 +1321,7 @@ const ReviewPhaseView: React.FC<ReviewPhaseViewProps> = ({
                 Si cualquiera rechaza, el proyecto vuelve a Creación Desarrollo.
                 {parallelSiblingApproved && (
                   <span className="block mt-1 text-emerald-700">
-                    La otra vía ya está aprobada — al aprobar esta se avanzará a Arte
+                    La otra vía ya está aprobada  al aprobar esta se avanzará a Arte
                     final.
                   </span>
                 )}
@@ -1350,7 +1350,7 @@ const ReviewPhaseView: React.FC<ReviewPhaseViewProps> = ({
         </Card>
       )}
 
-      {/* ── Aprobación final: arte final download + ZIP explorer ── */}
+      {/* -- Aprobación final: arte final download + ZIP explorer -- */}
       {(isFinalPhase || isAprobado) ? (
         <>
           {/* "Aprobado" locked banner (only when fully closed) */}
@@ -1454,7 +1454,7 @@ const ReviewPhaseView: React.FC<ReviewPhaseViewProps> = ({
           )}
         </>
       ) : (
-        /* ── Normal review phase: show proposal ── */
+        /* -- Normal review phase: show proposal -- */
         <Card>
           <CardHeader className="flex flex-row items-start justify-between gap-3">
             <div>
@@ -1579,7 +1579,7 @@ const ReviewPhaseView: React.FC<ReviewPhaseViewProps> = ({
         </Card>
       )}
 
-      {/* Acciones — solo roles autorizados para esta fase / vía */}
+      {/* Acciones  solo roles autorizados para esta fase / vía */}
       {canAct && (
         <Card>
           <CardContent className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -1620,7 +1620,7 @@ const ReviewPhaseView: React.FC<ReviewPhaseViewProps> = ({
   );
 };
 
-// ─── Arte final view ─────────────────────────────────────────────────────────
+// --- Arte final view ---------------------------------------------------------
 
 interface FinalPrepViewProps {
   projectId: string;
@@ -1670,11 +1670,11 @@ const FinalPrepView: React.FC<FinalPrepViewProps> = ({
     setSubmitting(true);
     try {
       if (pendingFile) {
-        setSubmitProgress('Subiendo arte final…');
+        setSubmitProgress('Subiendo arte final');
         await addArteFinal(projectId, pendingFile);
         clearPending();
       }
-      setSubmitProgress('Enviando a aprobación final…');
+      setSubmitProgress('Enviando a aprobación final');
       await approveCurrentPhase(projectId);
     } catch {
       /* toast ya lo muestra el store */
@@ -1923,7 +1923,7 @@ const FinalPrepView: React.FC<FinalPrepViewProps> = ({
         </Card>
       )}
 
-      {/* Acciones — solo Diseño */}
+      {/* Acciones  solo Diseño */}
       {canEdit && (
         <Card>
           <CardContent className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -1949,7 +1949,7 @@ const FinalPrepView: React.FC<FinalPrepViewProps> = ({
             >
               {submitting ? (
                 <>
-                  <Loader2 size={16} className="animate-spin" /> Enviando…
+                  <Loader2 size={16} className="animate-spin" /> Enviando
                 </>
               ) : (
                 <>
@@ -1964,7 +1964,7 @@ const FinalPrepView: React.FC<FinalPrepViewProps> = ({
   );
 };
 
-// ─── Creación Desarrollo view ────────────────────────────────────────────────
+// --- Creación Desarrollo view ------------------------------------------------
 
 interface DesarrolloPhaseViewProps {
   isCurrent: boolean;
@@ -2032,7 +2032,7 @@ const DesarrolloPhaseView: React.FC<DesarrolloPhaseViewProps> = ({
             </p>
             <p className="text-xs text-slate-500 mt-1">
               {desarrolloProposal
-                ? `"${desarrolloProposal.name}" (${desarrolloProposal.version}) — enviado a Validación y Aprobación Legal (en paralelo)`
+                ? `"${desarrolloProposal.name}" (${desarrolloProposal.version})  enviado a Validación y Aprobación Legal (en paralelo)`
                 : isCurrent
                   ? 'Usa el botón «Subir archivo de desarrollo» en la cabecera para adjuntar el archivo técnico.'
                   : ''}
@@ -2055,7 +2055,7 @@ const DesarrolloPhaseView: React.FC<DesarrolloPhaseViewProps> = ({
   );
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 export const TabResumen = ({
   projectId,
@@ -2242,7 +2242,8 @@ export const TabResumen = ({
   const isCurrent =
     selectedPhase === project.phase ||
     (inParallelGate && isParallelReviewPhase(selectedPhase));
-  const canDesignRole = activeRole === 'Diseño' || activeRole === 'Admin';
+  const canDesignRole =
+    activeRole === 'Diseño' || activeRole === 'Admin' || activeRole === 'Manager';
   const canAddFilesOnDesignReview =
     Boolean(onOpenUpload) &&
     canDesignRole &&

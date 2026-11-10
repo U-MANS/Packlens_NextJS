@@ -1,14 +1,14 @@
 import { NextRequest } from 'next/server';
-import { requireUser } from '@/lib/server/auth';
 import { jsonError, jsonOk } from '@/lib/server/http';
+import { requireOrg } from '@/lib/server/org';
 import { projectsToRead } from '@/lib/server/serializers';
 import { addActivity, primaryMarket, reloadProject } from '@/lib/server/workflow';
 import { getAdminClient } from '@/lib/supabase/admin';
 import { initialPhaseForFlow, PHASE_TO_STATUS } from '@/lib/server/phase';
 
 export async function GET(request: NextRequest) {
-  const user = await requireUser(request);
-  if (user instanceof Response) return user;
+  const ctx = await requireOrg(request);
+  if (ctx instanceof Response) return ctx;
 
   const { searchParams } = new URL(request.url);
   const search = searchParams.get('search');
@@ -22,6 +22,7 @@ export async function GET(request: NextRequest) {
   let query = admin
     .from('projects')
     .select('*, owner_user:users!projects_owner_id_fkey(name)')
+    .eq('organization_id', ctx.organizationId)
     .order('created_at', { ascending: false });
 
   if (archivedParam === null || archivedParam === 'false') {
@@ -40,6 +41,18 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await query;
   if (error) {
+    // Compat: columna organization_id aún no migrada
+    if (/organization_id/i.test(error.message)) {
+      let fallback = admin
+        .from('projects')
+        .select('*, owner_user:users!projects_owner_id_fkey(name)')
+        .order('created_at', { ascending: false });
+      if (archivedParam === null || archivedParam === 'false') fallback = fallback.eq('archived', false);
+      else if (archivedParam === 'true') fallback = fallback.eq('archived', true);
+      const res = await fallback;
+      if (res.error) return jsonError(res.error.message, 500);
+      return jsonOk(await projectsToRead((res.data ?? []) as Parameters<typeof projectsToRead>[0]));
+    }
     console.error('[projects]', error);
     return jsonError(error.message, 500);
   }
@@ -48,8 +61,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const user = await requireUser(request);
-  if (user instanceof Response) return user;
+  const ctx = await requireOrg(request);
+  if (ctx instanceof Response) return ctx;
+  const user = ctx.user;
 
   const body = (await request.json()) as {
     name: string;
@@ -99,6 +113,7 @@ export async function POST(request: NextRequest) {
     .from('projects')
     .select('id')
     .eq('sku', body.sku)
+    .eq('organization_id', ctx.organizationId)
     .eq('archived', false)
     .maybeSingle();
   if (existing) return jsonError(`Ya existe un proyecto activo con SKU ${body.sku}`, 409);
@@ -144,41 +159,51 @@ export async function POST(request: NextRequest) {
   const flowType = body.flow_type ?? null;
   const initialPhase = initialPhaseForFlow(flowType);
 
-  const { data: project, error } = await admin
+  const insertPayload: Record<string, unknown> = {
+    name: body.name,
+    sku: body.sku,
+    market: label,
+    language: code,
+    flow_type: flowType,
+    status: PHASE_TO_STATUS[initialPhase] ?? 'En diseño',
+    phase: initialPhase,
+    owner_id: ownerId,
+    target_date: body.launch_date ?? new Date().toISOString().slice(0, 10),
+    description: body.description ?? null,
+    lifecycle_status: 'Borrador',
+    version: 1,
+    product_line: body.product_line ?? null,
+    format: body.format ?? null,
+    markets: body.markets ?? [],
+    label_languages: body.label_languages ?? [],
+    label_languages_front: body.label_languages_front ?? [],
+    label_languages_back: body.label_languages_back ?? [],
+    launch_date: body.launch_date ?? null,
+    art_deadline: body.art_deadline ?? null,
+    regulatory_contact: regulatoryType === 'user' ? (body.regulatory_contact ?? null) : null,
+    design_lead: body.design_lead ?? null,
+    marketing_assignee_type: marketingType,
+    marketing_agent_id: marketingType === 'agent' ? body.marketing_agent_id : null,
+    regulatory_assignee_type: regulatoryType,
+    regulatory_agent_id: regulatoryType === 'agent' ? body.regulatory_agent_id : null,
+    briefing,
+    substitution_type: body.substitution_type ?? null,
+    temporal_end_date: body.temporal_end_date ?? null,
+    organization_id: ctx.organizationId,
+  };
+
+  let { data: project, error } = await admin
     .from('projects')
-    .insert({
-      name: body.name,
-      sku: body.sku,
-      market: label,
-      language: code,
-      flow_type: flowType,
-      status: PHASE_TO_STATUS[initialPhase] ?? 'En diseño',
-      phase: initialPhase,
-      owner_id: ownerId,
-      target_date: body.launch_date ?? new Date().toISOString().slice(0, 10),
-      description: body.description ?? null,
-      lifecycle_status: 'Borrador',
-      version: 1,
-      product_line: body.product_line ?? null,
-      format: body.format ?? null,
-      markets: body.markets ?? [],
-      label_languages: body.label_languages ?? [],
-      label_languages_front: body.label_languages_front ?? [],
-      label_languages_back: body.label_languages_back ?? [],
-      launch_date: body.launch_date ?? null,
-      art_deadline: body.art_deadline ?? null,
-      regulatory_contact: regulatoryType === 'user' ? (body.regulatory_contact ?? null) : null,
-      design_lead: body.design_lead ?? null,
-      marketing_assignee_type: marketingType,
-      marketing_agent_id: marketingType === 'agent' ? body.marketing_agent_id : null,
-      regulatory_assignee_type: regulatoryType,
-      regulatory_agent_id: regulatoryType === 'agent' ? body.regulatory_agent_id : null,
-      briefing,
-      substitution_type: body.substitution_type ?? null,
-      temporal_end_date: body.temporal_end_date ?? null,
-    })
+    .insert(insertPayload)
     .select('id')
     .single();
+
+  if (error && /organization_id/i.test(error.message)) {
+    delete insertPayload.organization_id;
+    const retry = await admin.from('projects').insert(insertPayload).select('id').single();
+    project = retry.data;
+    error = retry.error;
+  }
 
   if (error || !project) return jsonError(error?.message || 'Error creando proyecto', 500);
   await addActivity(project.id, user.id, 'PROJECT_CREATED', `Proyecto creado: ${body.name}`);

@@ -1,7 +1,9 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import * as api from '../api';
-import { setTokenRefreshHandler, ApiError } from '../api/client';
+import type { ApiUser } from '../api/mappers';
+import { setTokenRefreshHandler, ApiError, setActiveOrganizationId } from '../api/client';
+import type { TenantConfig } from '../lib/tenant/types';
 import type { Role } from '../types';
 
 export interface AuthUser {
@@ -12,10 +14,27 @@ export interface AuthUser {
   initials?: string;
 }
 
+export interface AuthOrganization {
+  id: string;
+  slug: string;
+  name: string;
+  template_key: string;
+  status: string;
+}
+
 interface AuthState {
   accessToken: string | null;
   refreshToken: string | null;
   user: AuthUser | null;
+  organization: AuthOrganization | null;
+  tenantConfig: TenantConfig | null;
+  memberships: Array<{
+    organization_id: string;
+    role: string;
+    organization: AuthOrganization | null;
+  }>;
+  availableOrganizations: AuthOrganization[];
+  isPlatformAdmin: boolean;
   isHydrated: boolean;
   isLoading: boolean;
   error: string | null;
@@ -34,6 +53,31 @@ interface AuthState {
   clearError: () => void;
   /** Actualiza campos del usuario en sesión (p. ej. tras cambiarse el rol a sí mismo). */
   patchSessionUser: (partial: Partial<AuthUser>) => void;
+  setOrganizationId: (id: string) => Promise<void>;
+  applyMe: (me: ApiUser) => void;
+}
+
+function applyMeToState(me: ApiUser) {
+  const organization = me.organization ?? null;
+  if (organization?.id) setActiveOrganizationId(organization.id);
+  return {
+    user: {
+      id: me.id,
+      name: me.name,
+      email: me.email,
+      role: me.role as Role,
+      initials: me.initials ?? undefined,
+    } as AuthUser,
+    organization,
+    tenantConfig: me.tenant_config ?? null,
+    memberships: (me.memberships || []).map((m) => ({
+      organization_id: m.organization_id,
+      role: m.role,
+      organization: m.organization,
+    })),
+    availableOrganizations: me.available_organizations || [],
+    isPlatformAdmin: Boolean(me.is_platform_admin),
+  };
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -42,9 +86,18 @@ export const useAuthStore = create<AuthState>()(
       accessToken: null,
       refreshToken: null,
       user: null,
+      organization: null,
+      tenantConfig: null,
+      memberships: [],
+      availableOrganizations: [],
+      isPlatformAdmin: false,
       isHydrated: false,
       isLoading: false,
       error: null,
+
+      applyMe: (me) => {
+        set(applyMeToState(me));
+      },
 
       login: async (email, password) => {
         set({ isLoading: true, error: null });
@@ -55,19 +108,21 @@ export const useAuthStore = create<AuthState>()(
             refreshToken: tokens.refresh_token,
           });
           const me = await api.getMe();
-          set({
-            user: {
-              id: me.id,
-              name: me.name,
-              email: me.email,
-              role: me.role as Role,
-              initials: me.initials ?? undefined,
-            },
-            isLoading: false,
-          });
+          set({ ...applyMeToState(me), isLoading: false });
         } catch (e) {
           const msg = e instanceof Error ? e.message : 'Error de autenticación';
-          set({ isLoading: false, error: msg, accessToken: null, refreshToken: null, user: null });
+          set({
+            isLoading: false,
+            error: msg,
+            accessToken: null,
+            refreshToken: null,
+            user: null,
+            organization: null,
+            tenantConfig: null,
+            memberships: [],
+            availableOrganizations: [],
+            isPlatformAdmin: false,
+          });
           throw e;
         }
       },
@@ -81,19 +136,21 @@ export const useAuthStore = create<AuthState>()(
             refreshToken: tokens.refresh_token,
           });
           const me = await api.getMe();
-          set({
-            user: {
-              id: me.id,
-              name: me.name,
-              email: me.email,
-              role: me.role as Role,
-              initials: me.initials ?? undefined,
-            },
-            isLoading: false,
-          });
+          set({ ...applyMeToState(me), isLoading: false });
         } catch (e) {
           const msg = e instanceof Error ? e.message : 'Error al registrar';
-          set({ isLoading: false, error: msg, accessToken: null, refreshToken: null, user: null });
+          set({
+            isLoading: false,
+            error: msg,
+            accessToken: null,
+            refreshToken: null,
+            user: null,
+            organization: null,
+            tenantConfig: null,
+            memberships: [],
+            availableOrganizations: [],
+            isPlatformAdmin: false,
+          });
           throw e;
         }
       },
@@ -107,19 +164,21 @@ export const useAuthStore = create<AuthState>()(
             refreshToken: tokens.refresh_token,
           });
           const me = await api.getMe();
-          set({
-            user: {
-              id: me.id,
-              name: me.name,
-              email: me.email,
-              role: me.role as Role,
-              initials: me.initials ?? undefined,
-            },
-            isLoading: false,
-          });
+          set({ ...applyMeToState(me), isLoading: false });
         } catch (e) {
           const msg = e instanceof Error ? e.message : 'Error al aceptar invitación';
-          set({ isLoading: false, error: msg, accessToken: null, refreshToken: null, user: null });
+          set({
+            isLoading: false,
+            error: msg,
+            accessToken: null,
+            refreshToken: null,
+            user: null,
+            organization: null,
+            tenantConfig: null,
+            memberships: [],
+            availableOrganizations: [],
+            isPlatformAdmin: false,
+          });
           throw e;
         }
       },
@@ -131,7 +190,17 @@ export const useAuthStore = create<AuthState>()(
         } catch {
           // ignore
         }
-        set({ accessToken: null, refreshToken: null, user: null });
+        setActiveOrganizationId(null);
+        set({
+          accessToken: null,
+          refreshToken: null,
+          user: null,
+          organization: null,
+          tenantConfig: null,
+          memberships: [],
+          availableOrganizations: [],
+          isPlatformAdmin: false,
+        });
       },
 
       restoreSession: async () => {
@@ -146,13 +215,7 @@ export const useAuthStore = create<AuthState>()(
             try {
               const me = await api.getMe();
               set({
-                user: {
-                  id: me.id,
-                  name: me.name,
-                  email: me.email,
-                  role: me.role as Role,
-                  initials: me.initials ?? undefined,
-                },
+                ...applyMeToState(me),
                 isLoading: false,
                 isHydrated: true,
               });
@@ -172,13 +235,7 @@ export const useAuthStore = create<AuthState>()(
             });
             const me = await api.getMe();
             set({
-              user: {
-                id: me.id,
-                name: me.name,
-                email: me.email,
-                role: me.role as Role,
-                initials: me.initials ?? undefined,
-              },
+              ...applyMeToState(me),
               isLoading: false,
               isHydrated: true,
             });
@@ -187,10 +244,16 @@ export const useAuthStore = create<AuthState>()(
 
           throw new Error('Sin sesión válida');
         } catch {
+          setActiveOrganizationId(null);
           set({
             accessToken: null,
             refreshToken: null,
             user: null,
+            organization: null,
+            tenantConfig: null,
+            memberships: [],
+            availableOrganizations: [],
+            isPlatformAdmin: false,
             isLoading: false,
             isHydrated: true,
           });
@@ -205,6 +268,16 @@ export const useAuthStore = create<AuthState>()(
         if (!current) return;
         set({ user: { ...current, ...partial } });
       },
+
+      setOrganizationId: async (id: string) => {
+        setActiveOrganizationId(id);
+        const me = await api.getMe();
+        set(applyMeToState(me));
+        // Forzar recarga de proyectos/datos del tenant activo
+        const { useAppStore } = await import('./useAppStore');
+        useAppStore.setState({ isBootstrapped: false });
+        await useAppStore.getState().bootstrap();
+      },
     }),
     {
       name: 'packlens-auth',
@@ -213,8 +286,10 @@ export const useAuthStore = create<AuthState>()(
         accessToken: s.accessToken,
         refreshToken: s.refreshToken,
         user: s.user,
+        organization: s.organization,
       }),
       onRehydrateStorage: () => (state) => {
+        if (state?.organization?.id) setActiveOrganizationId(state.organization.id);
         state?.restoreSession();
       },
     },

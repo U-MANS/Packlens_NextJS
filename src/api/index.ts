@@ -57,6 +57,44 @@ export async function getMe(): Promise<ApiUser> {
   return apiFetch<ApiUser>('/auth/me');
 }
 
+export async function getOrgSettings() {
+  return apiFetch<{
+    organization: {
+      id: string;
+      slug: string;
+      name: string;
+      template_key: string;
+      status: string;
+    };
+    config: import('../lib/tenant/types').TenantConfig;
+    template_key: string;
+    settings: Record<string, unknown>;
+    templates: Array<{ key: string; name: string }>;
+  }>('/org');
+}
+
+export async function updateOrgSettings(payload: {
+  name?: string;
+  template_key?: string;
+  settings?: import('../lib/tenant/types').TenantSettingsOverride;
+  apply_template?: boolean;
+}) {
+  return apiFetch<{
+    organization: {
+      id: string;
+      slug: string;
+      name: string;
+      template_key: string;
+      status: string;
+    };
+    config: import('../lib/tenant/types').TenantConfig;
+    settings: Record<string, unknown>;
+  }>('/org', {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
 export interface DebugRegisterPayload {
   name: string;
   email: string;

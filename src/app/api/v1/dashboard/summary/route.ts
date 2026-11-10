@@ -1,18 +1,27 @@
 import { NextRequest } from 'next/server';
-import { requireUser } from '@/lib/server/auth';
 import { jsonError, jsonOk } from '@/lib/server/http';
-import { projectToRead } from '@/lib/server/serializers';
+import { requireOrg } from '@/lib/server/org';
 import { getAdminClient } from '@/lib/supabase/admin';
 
 export async function GET(request: NextRequest) {
-  const user = await requireUser(request);
-  if (user instanceof Response) return user;
+  const ctx = await requireOrg(request);
+  if (ctx instanceof Response) return ctx;
 
   const admin = getAdminClient();
-  const { data: projects, error } = await admin
+  let { data: projects, error } = await admin
     .from('projects')
     .select('id, phase, market, product_line, archived, status, target_date')
-    .eq('archived', false);
+    .eq('archived', false)
+    .eq('organization_id', ctx.organizationId);
+
+  if (error && /organization_id/i.test(error.message)) {
+    const fallback = await admin
+      .from('projects')
+      .select('id, phase, market, product_line, archived, status, target_date')
+      .eq('archived', false);
+    projects = fallback.data;
+    error = fallback.error;
+  }
 
   if (error) return jsonError(error.message, 500);
 

@@ -27,7 +27,7 @@ import { isPhaseOwnedByRole, phasesOwnedByRole } from '../utils/phase';
 import { filterProjectsForRole, isComercialView } from '../utils/roles';
 import { formatDate } from '../utils/dates';
 
-// ─── Lifecycle badge ──────────────────────────────────────────────────────────
+// --- Lifecycle badge ----------------------------------------------------------
 
 const LIFECYCLE_STYLES: Record<LifecycleStatus, string> = {
   Borrador:
@@ -55,7 +55,7 @@ const LifecycleBadge = ({ status }: { status: LifecycleStatus | undefined }) => 
   );
 };
 
-// ─── Version badge ────────────────────────────────────────────────────────────
+// --- Version badge ------------------------------------------------------------
 
 const VersionBadge = ({ version }: { version: number }) => (
   <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-slate-100 text-slate-500 border border-slate-200 ml-1.5">
@@ -63,7 +63,7 @@ const VersionBadge = ({ version }: { version: number }) => (
   </span>
 );
 
-// ─── Context menu ─────────────────────────────────────────────────────────────
+// --- Context menu -------------------------------------------------------------
 
 interface RowMenuProps {
   project: Project;
@@ -164,7 +164,7 @@ const RowMenu: React.FC<RowMenuProps> = ({
   );
 };
 
-// ─── Row ─────────────────────────────────────────────────────────────────────
+// --- Row ---------------------------------------------------------------------
 
 interface ProjectRowProps {
   project: Project;
@@ -228,7 +228,7 @@ const ProjectRow: React.FC<ProjectRowProps> = ({ project, openMenuId, setOpenMen
           <span className="text-xs text-slate-400 font-mono">{project.sku}</span>
           {project.previousVersionId && (
             <span className="text-[10px] text-blue-500 font-medium">
-              ↳ nueva versión
+              ? nueva versión
             </span>
           )}
         </div>
@@ -253,13 +253,13 @@ const ProjectRow: React.FC<ProjectRowProps> = ({ project, openMenuId, setOpenMen
       <td className="px-6 py-4 text-slate-600">
         {project.productLine || project.format ? (
           <>
-            <div className="text-slate-700">{project.productLine ?? '—'}</div>
+            <div className="text-slate-700">{project.productLine ?? ''}</div>
             {project.format && (
               <div className="text-xs text-slate-400 mt-0.5">{project.format}</div>
             )}
           </>
         ) : (
-          <span className="text-slate-300">—</span>
+          <span className="text-slate-300"></span>
         )}
       </td>
       <td className="px-6 py-4">
@@ -321,14 +321,14 @@ const ProjectRow: React.FC<ProjectRowProps> = ({ project, openMenuId, setOpenMen
   );
 };
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// --- Main component -----------------------------------------------------------
 
 const ProjectList = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { projects, activeRole, bootstrap, refreshProjects } = useAppStore();
   const user = useAuthStore((s) => s.user);
-  const isAdmin = user?.role === 'Admin';
+  const isAdmin = user?.role === 'Admin' || user?.role === 'Manager';
   const isComercial = isComercialView(activeRole);
   const awaitingMe = searchParams.get('awaitingMe') === '1';
   const rejectedFilter = searchParams.get('rejected') === '1';
@@ -342,7 +342,7 @@ const ProjectList = () => {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [creatingDemo, setCreatingDemo] = useState(false);
 
-  // Al entrar en /projects, sincroniza con el servidor (altas, versiones, ciclos…).
+  // Al entrar en /projects, sincroniza con el servidor (altas, versiones, ciclos).
   useEffect(() => {
     void refreshProjects();
   }, [refreshProjects]);
@@ -458,7 +458,7 @@ const ProjectList = () => {
                 className="flex items-center gap-2 border border-border bg-surface hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-md font-medium transition-colors disabled:opacity-60"
               >
                 <FlaskConical size={16} />
-                {creatingDemo ? 'Creando demo…' : 'Proyecto demo'}
+                {creatingDemo ? 'Creando demo' : 'Proyecto demo'}
               </button>
             )}
             <button

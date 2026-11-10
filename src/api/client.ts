@@ -1,5 +1,23 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api/v1';
 const AUTH_STORAGE_KEY = 'packlens-auth';
+const ORG_STORAGE_KEY = 'packlens-organization-id';
+
+export function getActiveOrganizationId(): string | null {
+  try {
+    return localStorage.getItem(ORG_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setActiveOrganizationId(id: string | null) {
+  try {
+    if (!id) localStorage.removeItem(ORG_STORAGE_KEY);
+    else localStorage.setItem(ORG_STORAGE_KEY, id);
+  } catch {
+    /* ignore */
+  }
+}
 
 export class ApiError extends Error {
   status: number;
@@ -111,6 +129,10 @@ export async function apiFetch<T>(
   }
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
+  }
+  const orgId = getActiveOrganizationId();
+  if (orgId && !headers.has('X-Organization-Id')) {
+    headers.set('X-Organization-Id', orgId);
   }
 
   const res = await fetch(`${API_BASE}${path}`, { ...options, headers });

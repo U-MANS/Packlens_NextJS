@@ -6,9 +6,10 @@ import { Modal } from '../components/ui/Modal';
 import { toast } from '../components/ui/Toast';
 import { getErrorMessage } from '../utils/errors';
 import { formatDateTime as formatDate } from '../utils/dates';
-import type { Role } from '../types';
+import { isOpsAdminRole, isPlatformAdminRole, type Role } from '../types';
+import { useAuthStore } from '../store/useAuthStore';
 
-const ALL_ROLES: Role[] = ['Marketing', 'Diseño', 'I+D', 'Comercial', 'Admin'];
+const ALL_ROLES: Role[] = ['Marketing', 'Diseño', 'I+D', 'Comercial', 'Manager', 'Admin'];
 
 const EMPTY_FORM = {
   email: '',
@@ -30,6 +31,10 @@ function statusClass(status: string) {
 }
 
 export default function InvitationsPanel() {
+  const currentRole = useAuthStore((s) => s.user?.role);
+  const assignableRoles = isPlatformAdminRole(currentRole)
+    ? ALL_ROLES
+    : ALL_ROLES.filter((r) => r !== 'Admin');
   const [invitations, setInvitations] = useState<ApiInvitation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -171,7 +176,7 @@ export default function InvitationsPanel() {
         {isLoading ? (
           <div className="py-16 flex flex-col items-center text-slate-400 gap-2">
             <Mail size={32} className="opacity-30 animate-pulse" />
-            <p className="text-sm">Cargando invitaciones…</p>
+            <p className="text-sm">Cargando invitaciones</p>
           </div>
         ) : invitations.length === 0 ? (
           <div className="py-16 flex flex-col items-center text-slate-400 gap-2">
@@ -202,7 +207,7 @@ export default function InvitationsPanel() {
                     </td>
                     <td className="px-4 py-3">
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-semibold bg-slate-50 text-slate-600 border-slate-200">
-                        {invitation.role === 'Admin' && <Shield size={11} />}
+                        {isOpsAdminRole(invitation.role) && <Shield size={11} />}
                         {invitation.role}
                       </span>
                     </td>
@@ -217,7 +222,7 @@ export default function InvitationsPanel() {
                       {formatDate(invitation.expires_at)}
                     </td>
                     <td className="px-4 py-3 text-slate-500">
-                      {invitation.invited_by_name ?? '—'}
+                      {invitation.invited_by_name ?? ''}
                     </td>
                     <td className="px-4 py-3">
                       {invitation.status === 'pending' && (
@@ -287,7 +292,7 @@ export default function InvitationsPanel() {
               disabled={isSubmitting}
               className="px-4 py-2 text-sm font-semibold bg-accent text-white rounded-lg hover:bg-accent-hover transition-colors disabled:opacity-60"
             >
-              {isSubmitting ? 'Enviando…' : 'Enviar invitación'}
+              {isSubmitting ? 'Enviando' : 'Enviar invitación'}
             </button>
           </div>
         }
@@ -330,7 +335,7 @@ export default function InvitationsPanel() {
               onChange={(e) => setForm((p) => ({ ...p, role: e.target.value as Role }))}
               className="w-full px-3 py-2 bg-white border border-border rounded-md text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
             >
-              {ALL_ROLES.map((role) => (
+              {assignableRoles.map((role) => (
                 <option key={role} value={role}>
                   {role}
                 </option>

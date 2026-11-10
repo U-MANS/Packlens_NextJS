@@ -1,4 +1,7 @@
 import type { PhaseAction, ProjectPhase, ProjectStatus } from '../types';
+import { isOpsAdminRole } from '../types';
+import { canRoleApprovePhase } from '../lib/tenant/config';
+import type { TenantConfig } from '../lib/tenant/types';
 
 export const PHASE_ORDER: ProjectPhase[] = [
   'Diseño',
@@ -156,7 +159,7 @@ export function getLatestIncomingRejection(
   }
   const source = rejectionSourcePhase(selectedPhase, flowType);
   if (!source) return undefined;
-  // Evitar el vínculo secuencial Legal → Validación (ya no aplica).
+  // Evitar el vínculo secuencial Legal ? Validación (ya no aplica).
   if (
     selectedPhase === 'Validación diseño' &&
     source === 'Aprobación Legal' &&
@@ -275,7 +278,7 @@ export function isProposalInUploadGroup(
   return false;
 }
 
-/** Siguiente etiqueta de versión (v1.0, v2.0…) según las versiones ya usadas en el grupo. */
+/** Siguiente etiqueta de versión (v1.0, v2.0) según las versiones ya usadas en el grupo. */
 export function suggestNextProposalVersion(existingVersions: string[]): string {
   let max = 0;
   for (const raw of existingVersions) {
@@ -285,9 +288,17 @@ export function suggestNextProposalVersion(existingVersions: string[]): string {
   return `v${max + 1}.0`;
 }
 
-/** ¿Puede este rol aprobar/rechazar la fase indicada? (espejo de backend permissions.py) */
-export function canApprovePhase(role: string, phase: ProjectPhase): boolean {
-  if (role === 'Admin') return true;
+/** ¿Puede este rol aprobar/rechazar la fase indicada? (tenant config o Helios). */
+export function canApprovePhase(
+  role: string,
+  phase: ProjectPhase,
+  config?: TenantConfig | null,
+): boolean {
+  if (config) {
+    if (canRoleApprovePhase(config, role, phase)) return true;
+    return isOpsAdminRole(role);
+  }
+  if (isOpsAdminRole(role)) return true;
   if (
     role === 'Marketing' &&
     (phase === 'Aprobación Diseño' ||
@@ -306,7 +317,7 @@ export function canApprovePhase(role: string, phase: ProjectPhase): boolean {
  * Usado en dashboard / listado «pendientes míos».
  */
 export function isPhaseOwnedByRole(role: string, phase: ProjectPhase): boolean {
-  if (role === 'Admin') {
+  if (isOpsAdminRole(role)) {
     return phase !== 'Aprobado';
   }
   if (role === 'Diseño') {
@@ -335,13 +346,13 @@ export function phasesOwnedByRole(role: string, flowType?: string | null): Proje
   return getPhaseOrder(flowType).filter((phase) => isPhaseOwnedByRole(role, phase));
 }
 
-/** Diseño (y Admin) gestionan subida y envío del arte final / masters. */
+/** Diseño (y Admin/Manager) gestionan subida y envío del arte final / masters. */
 export const canManageArteFinal = (role: string, phase: ProjectPhase) =>
-  (role === 'Diseño' || role === 'Admin') && phase === 'Arte final';
+  (role === 'Diseño' || isOpsAdminRole(role)) && phase === 'Arte final';
 
 /** Fases en las que Diseño puede gestionar el briefing creativo. */
 export const canManageBriefing = (role: string, phase: ProjectPhase, flowType?: string | null) => {
-  if (!(role === 'Diseño' || role === 'Admin' || role === 'Marketing')) return false;
+  if (!(role === 'Diseño' || isOpsAdminRole(role) || role === 'Marketing')) return false;
   if (isAudiovisualFlow(flowType)) {
     return phase === 'Creación Desarrollo' || phase === 'Aprobación Diseño';
   }
@@ -360,14 +371,14 @@ export const hasPassedDesignApproval = (phase: ProjectPhase, flowType?: string |
 export const PHASE_TOAST: Record<string, { msg: string; dept: string }> = {
   'Diseño': {
     msg: 'Arte devuelto a Diseño',
-    dept: 'Equipo de Diseño — se han solicitado cambios',
+    dept: 'Equipo de Diseño  se han solicitado cambios',
   },
   'Aprobación Diseño': {
     msg: 'Propuesta enviada a Aprobación de Diseño',
     dept: 'Equipo de Marketing',
   },
   'Creación Desarrollo': {
-    msg: 'Diseño aprobado — iniciar Creación de Desarrollo',
+    msg: 'Diseño aprobado  iniciar Creación de Desarrollo',
     dept: 'Equipo de Diseño',
   },
   'Validación diseño': {
@@ -379,7 +390,7 @@ export const PHASE_TOAST: Record<string, { msg: string; dept: string }> = {
     dept: 'Departamento Legal (I+D)',
   },
   'Arte final': {
-    msg: 'Validación y Legal aprobados — subir Arte Final',
+    msg: 'Validación y Legal aprobados  subir Arte Final',
     dept: 'Equipo de Diseño',
   },
   'Aprobación final': {
@@ -387,7 +398,7 @@ export const PHASE_TOAST: Record<string, { msg: string; dept: string }> = {
     dept: 'Todos los departamentos',
   },
   'Aprobado': {
-    msg: '🎉 ¡Proyecto aprobado y cerrado!',
+    msg: '?? ¡Proyecto aprobado y cerrado!',
     dept: 'Todos los departamentos',
   },
 };

@@ -123,7 +123,7 @@ function AgentRowMenu({
 
 export default function Agents() {
   const user = useAuthStore((s) => s.user);
-  const isAdmin = user?.role === 'Admin';
+  const isAdmin = user?.role === 'Admin' || user?.role === 'Manager';
 
   const [agents, setAgents] = useState<ApiAgent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -261,7 +261,7 @@ export default function Agents() {
             onClick={() => void handleSave()}
             className="px-4 py-2 rounded-md bg-accent text-white text-sm font-medium hover:bg-accent-hover disabled:opacity-50"
           >
-            {submitting ? 'Guardando…' : 'Guardar'}
+            {submitting ? 'Guardando' : 'Guardar'}
           </button>
         </>
       }
@@ -310,7 +310,7 @@ export default function Agents() {
             className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 resize-y min-h-[140px]"
             value={form.prompt}
             onChange={(e) => setForm((p) => ({ ...p, prompt: e.target.value }))}
-            placeholder="Eres un revisor de packaging. Evalúa cumplimiento normativo, claims…"
+            placeholder="Eres un revisor de packaging. Evalúa cumplimiento normativo, claims"
             disabled={submitting}
           />
         </label>
@@ -346,7 +346,7 @@ export default function Agents() {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por nombre o prompt…"
+            placeholder="Buscar por nombre o prompt"
             className="w-full pl-9 pr-3 py-2 bg-white border border-border rounded-md text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
           />
         </div>
@@ -370,7 +370,7 @@ export default function Agents() {
 
       <div className="bg-surface border border-border rounded-xl overflow-hidden shadow-sm">
         {loading ? (
-          <p className="p-8 text-center text-sm text-slate-400">Cargando agentes…</p>
+          <p className="p-8 text-center text-sm text-slate-400">Cargando agentes</p>
         ) : filtered.length === 0 ? (
           <p className="p-8 text-center text-sm text-slate-400">
             No hay agentes{search || roleFilter !== 'Todos' ? ' con estos filtros' : ''}.

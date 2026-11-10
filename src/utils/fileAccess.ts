@@ -1,10 +1,10 @@
 /**
  * Reglas de acceso a archivos del flujo de aprobación.
  * PDF e imágenes: visibles para todos los roles del proyecto.
- * Resto (ZIP, nativos, vídeos, Office…): solo Diseño y Marketing (+ Admin).
+ * Resto (ZIP, nativos, vídeos, Office): solo Diseño y Marketing (+ Admin).
  */
 
-export const RESTRICTED_FILE_ROLES = ['Diseño', 'Marketing', 'Admin'] as const;
+export const RESTRICTED_FILE_ROLES = ['Diseño', 'Marketing', 'Admin', 'Manager'] as const;
 
 export function isPublicWorkflowFile(file: {
   mimeType?: string | null;

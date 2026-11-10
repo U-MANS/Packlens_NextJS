@@ -291,12 +291,12 @@ export default function CampaignsCalendar() {
       </div>
 
       <div className="bg-surface border border-border rounded-xl shadow-sm overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-border bg-slate-50/70">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-border bg-slate-50 dark:bg-[var(--pl-secondary)]">
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={goPrev}
-              className="p-2 rounded-md border border-border bg-white text-slate-600 hover:border-accent hover:text-accent"
+              className="p-2 rounded-md border border-border bg-surface text-slate-600 hover:border-accent hover:text-accent transition-colors"
               aria-label="Mes anterior"
             >
               <ChevronLeft size={18} />
@@ -304,17 +304,17 @@ export default function CampaignsCalendar() {
             <button
               type="button"
               onClick={goNext}
-              className="p-2 rounded-md border border-border bg-white text-slate-600 hover:border-accent hover:text-accent"
+              className="p-2 rounded-md border border-border bg-surface text-slate-600 hover:border-accent hover:text-accent transition-colors"
               aria-label="Mes siguiente"
             >
               <ChevronRight size={18} />
             </button>
             <div className="flex items-center gap-2 ml-1">
-              <CalendarDays size={16} className="text-slate-400" />
+              <CalendarDays size={16} className="text-slate-400 shrink-0" />
               <select
                 value={month}
                 onChange={(e) => setMonth(Number(e.target.value))}
-                className="text-sm font-semibold text-primary bg-white border border-border rounded-md px-2 py-1.5"
+                className="text-sm font-semibold text-primary bg-surface border border-border rounded-md px-2 py-1.5 focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
               >
                 {MONTHS.map((label, idx) => (
                   <option key={label} value={idx}>
@@ -325,7 +325,7 @@ export default function CampaignsCalendar() {
               <select
                 value={year}
                 onChange={(e) => setYear(Number(e.target.value))}
-                className="text-sm font-semibold text-primary bg-white border border-border rounded-md px-2 py-1.5"
+                className="text-sm font-semibold text-primary bg-surface border border-border rounded-md px-2 py-1.5 focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
               >
                 {yearOptions.map((y) => (
                   <option key={y} value={y}>
@@ -347,7 +347,7 @@ export default function CampaignsCalendar() {
           </button>
         </div>
 
-        <div className="grid grid-cols-7 border-b border-border bg-white">
+        <div className="grid grid-cols-7 border-b border-border bg-surface">
           {WEEKDAYS.map((d) => (
             <div
               key={d}

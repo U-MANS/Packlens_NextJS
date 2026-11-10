@@ -3,7 +3,18 @@ export type Role =
   | 'Diseño'
   | 'I+D'
   | 'Admin'
+  | 'Manager'
   | 'Comercial';
+
+/** Admin de plataforma o jefe de cliente (operativo). */
+export function isOpsAdminRole(role: string | null | undefined): boolean {
+  return role === 'Admin' || role === 'Manager';
+}
+
+/** Solo Admin de plataforma (config. tenant). */
+export function isPlatformAdminRole(role: string | null | undefined): boolean {
+  return role === 'Admin';
+}
 
 export type LifecycleStatus =
   | 'Borrador'
@@ -65,7 +76,7 @@ export interface ProjectBriefing {
   notes?: string;
   /** Proyectos referenciados como inspiración / base del briefing. */
   refs?: { id: string; name: string; sku: string }[];
-  /** @deprecated Legacy single-file fields — mantenidos por compatibilidad */
+  /** @deprecated Legacy single-file fields  mantenidos por compatibilidad */
   fileName?: string;
   fileSizeKb?: number;
   dataUrl?: string;
@@ -97,7 +108,7 @@ export interface Project {
   /** Código SAP asignado al producto (opcional hasta que se registre en SAP). */
   sapCode?: string;
 
-  /** Número de versión: 1, 2, 3… Se muestra como "v1", "v2", etc. */
+  /** Número de versión: 1, 2, 3 Se muestra como "v1", "v2", etc. */
   version: number;
   /** Id del proyecto del que deriva esta versión (si es una nueva versión). */
   previousVersionId?: string;
@@ -198,7 +209,7 @@ export interface ActivityEvent {
   phaseActionId?: string;
 }
 
-// ─── Arte Final ─────────────────────────────────────────────────────────────
+// --- Arte Final -------------------------------------------------------------
 
 /**
  * Archivo de arte final subido durante la fase "Arte final".
@@ -212,7 +223,7 @@ export interface ArteFinal {
   createdAt: string;
 }
 
-// ─── Campañas ────────────────────────────────────────────────────────────────
+// --- Campañas ----------------------------------------------------------------
 
 export type CampaignFormat =
   | 'Banner estático/animado'
@@ -256,7 +267,7 @@ export interface Campaign {
   archived: boolean;
 }
 
-// ─── Activity Replies ────────────────────────────────────────────────────────
+// --- Activity Replies --------------------------------------------------------
 
 export interface ActivityReply {
   id: string;
@@ -276,7 +287,7 @@ export interface ProjectAttachment {
   fileSizeKb: number;
   /** Previsualización (URL firmada de storage o blob). */
   dataUrl: string;
-  /** Descarga autenticada vía API — no expone Supabase. */
+  /** Descarga autenticada vía API  no expone Supabase. */
   downloadUrl?: string;
   isImage: boolean;
   /** true si el archivo es un vídeo */

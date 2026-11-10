@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { requireUser } from '@/lib/server/auth';
 import { jsonError, jsonOk } from '@/lib/server/http';
 import { attachmentToRead } from '@/lib/server/files';
+import { getProjectInOrg, requireOrg } from '@/lib/server/org';
 import { canManageBriefing } from '@/lib/server/permissions';
 import { projectToReadFresh } from '@/lib/server/serializers';
 import { getProjectRow, primaryMarket, reloadProject } from '@/lib/server/workflow';
@@ -36,19 +37,19 @@ async function mapProposal(proposal: Record<string, unknown> & { id: string; upl
 }
 
 export async function GET(request: NextRequest, context: Ctx) {
-  const user = await requireUser(request);
-  if (user instanceof Response) return user;
+  const ctx = await requireOrg(request);
+  if (ctx instanceof Response) return ctx;
 
   const { id } = await context.params;
   const admin = getAdminClient();
 
-  const { data: project, error } = await admin
-    .from('projects')
-    .select('*, owner_user:users!projects_owner_id_fkey(name)')
-    .eq('id', id)
-    .maybeSingle();
-
-  if (error) return jsonError(error.message, 500);
+  const scoped = await getProjectInOrg(
+    id,
+    ctx.organizationId,
+    '*, owner_user:users!projects_owner_id_fkey(name)'
+  );
+  if (scoped.error) return jsonError(scoped.error, 500);
+  const project = scoped.data;
   if (!project) return jsonError('Proyecto no encontrado', 404);
 
   const base = await projectToReadFresh(project as Parameters<typeof projectToReadFresh>[0]);

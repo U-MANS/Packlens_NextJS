@@ -15,7 +15,7 @@ import {
 import { isProjectVisibleToRole } from '../utils/roles';
 import type { LifecycleStatus } from '../types';
 
-// ─── Lifecycle badge (local, mirrors ProjectList) ─────────────────────────────
+// --- Lifecycle badge (local, mirrors ProjectList) -----------------------------
 
 const LIFECYCLE_STYLES: Record<LifecycleStatus, string> = {
   Borrador:        'bg-slate-100 text-slate-600 border-slate-200',
@@ -157,11 +157,14 @@ const ProjectDetail = () => {
       : `${project.market} (${project.language})`;
 
   const canShowDesignProposalUpload =
-    (activeRole === 'Diseño' || activeRole === 'Admin') && isDesignUploadPhase(project.phase);
+    (activeRole === 'Diseño' || activeRole === 'Admin' || activeRole === 'Manager') &&
+    isDesignUploadPhase(project.phase);
   const canShowDesarrolloUpload =
-    (activeRole === 'Diseño' || activeRole === 'Admin') && isDesarrolloUploadPhase(project.phase);
+    (activeRole === 'Diseño' || activeRole === 'Admin' || activeRole === 'Manager') &&
+    isDesarrolloUploadPhase(project.phase);
   const canShowDesignUpload = canShowDesignProposalUpload || canShowDesarrolloUpload;
-  const canEditProject = activeRole === 'Marketing' || activeRole === 'Admin';
+  const canEditProject =
+    activeRole === 'Marketing' || activeRole === 'Admin' || activeRole === 'Manager';
 
   const openEditModal = () => {
     setEditForm({
@@ -208,9 +211,9 @@ const ProjectDetail = () => {
             </div>
             <p className="text-slate-500 text-sm flex items-center flex-wrap gap-x-0">
               <span className="font-mono">{project.sku}</span>
-              <span className="mx-2 text-slate-300">•</span>
+              <span className="mx-2 text-slate-300"></span>
               Mercados: {marketsLabel}
-              <span className="mx-2 text-slate-300">•</span>
+              <span className="mx-2 text-slate-300"></span>
               Responsable:{' '}
               {project.marketingAssigneeType === 'agent' && project.marketingAgentName
                 ? `${project.marketingAgentName} (Agente)`
@@ -218,7 +221,7 @@ const ProjectDetail = () => {
               {(project.regulatoryAssigneeType === 'agent' && project.regulatoryAgentName) ||
               project.regulatoryContact ? (
                 <>
-                  <span className="mx-2 text-slate-300">•</span>
+                  <span className="mx-2 text-slate-300"></span>
                   I+D:{' '}
                   {project.regulatoryAssigneeType === 'agent' && project.regulatoryAgentName
                     ? `${project.regulatoryAgentName} (Agente)`
@@ -280,7 +283,7 @@ const ProjectDetail = () => {
             {project.agentReviewRunning && (
               <div className="mt-3 inline-flex items-center gap-2 text-xs font-medium text-violet-800 bg-violet-50 border border-violet-200 px-3 py-1.5 rounded-md">
                 <span className="w-1.5 h-1.5 rounded-full bg-violet-500 animate-pulse" />
-                Agente IA revisando esta fase…
+                Agente IA revisando esta fase
               </div>
             )}
 

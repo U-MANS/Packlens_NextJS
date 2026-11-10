@@ -4,7 +4,7 @@ import type { Role } from '../types';
 import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
 
-const ROLES: Role[] = ['Marketing', 'Diseño', 'I+D', 'Admin', 'Comercial'];
+const ROLES: Role[] = ['Marketing', 'Diseño', 'I+D', 'Admin', 'Manager', 'Comercial'];
 
 const debugSignupEnabled =
   process.env.NEXT_PUBLIC_DEBUG_SIGNUP === 'true' || process.env.NODE_ENV === 'development';
@@ -57,7 +57,7 @@ export default function RegisterDebug() {
             P
           </div>
           <h1 className="text-2xl font-bold text-primary">Registro debug</h1>
-          <p className="text-slate-500 text-sm mt-1">Solo desarrollo — crea tu cuenta con tu email real</p>
+          <p className="text-slate-500 text-sm mt-1">Solo desarrollo  crea tu cuenta con tu email real</p>
         </div>
 
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
@@ -143,7 +143,7 @@ export default function RegisterDebug() {
             disabled={isLoading}
             className="w-full py-2.5 rounded-md bg-accent text-white font-semibold text-sm hover:bg-accent-hover transition-colors disabled:opacity-60"
           >
-            {isLoading ? 'Creando cuenta…' : 'Crear cuenta y entrar'}
+            {isLoading ? 'Creando cuenta' : 'Crear cuenta y entrar'}
           </button>
         </form>
 

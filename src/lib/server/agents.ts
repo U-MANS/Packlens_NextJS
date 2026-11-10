@@ -34,13 +34,25 @@ export function canManageAgents(user: DbUser): boolean {
 export async function listAgents(params?: {
   role?: string;
   status?: string;
+  organizationId?: string;
 }): Promise<DbAgent[]> {
   const admin = getAdminClient();
   let query = admin.from('agents').select('*').order('name');
   if (params?.role) query = query.eq('role', params.role);
   if (params?.status) query = query.eq('status', params.status);
+  if (params?.organizationId) query = query.eq('organization_id', params.organizationId);
   const { data, error } = await query;
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (params?.organizationId && /organization_id/i.test(error.message)) {
+      let fallback = admin.from('agents').select('*').order('name');
+      if (params?.role) fallback = fallback.eq('role', params.role);
+      if (params?.status) fallback = fallback.eq('status', params.status);
+      const retry = await fallback;
+      if (retry.error) throw new Error(retry.error.message);
+      return (retry.data ?? []) as DbAgent[];
+    }
+    throw new Error(error.message);
+  }
   return (data ?? []) as DbAgent[];
 }
 

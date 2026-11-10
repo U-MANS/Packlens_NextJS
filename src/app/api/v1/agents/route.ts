@@ -1,5 +1,4 @@
 import { NextRequest } from 'next/server';
-import { requireUser } from '@/lib/server/auth';
 import { jsonError, jsonOk } from '@/lib/server/http';
 import {
   agentToApi,
@@ -8,20 +7,21 @@ import {
   type AgentRole,
   type DbAgent,
 } from '@/lib/server/agents';
+import { requireOrg } from '@/lib/server/org';
 import { getAdminClient } from '@/lib/supabase/admin';
 
 const ALLOWED_ROLES = new Set<AgentRole>(['Marketing', 'I+D']);
 
 export async function GET(request: NextRequest) {
-  const current = await requireUser(request);
-  if (current instanceof Response) return current;
+  const ctx = await requireOrg(request);
+  if (ctx instanceof Response) return ctx;
 
   const { searchParams } = new URL(request.url);
   const role = searchParams.get('role') ?? undefined;
   const status = searchParams.get('status') ?? undefined;
 
   try {
-    const agents = await listAgents({ role, status });
+    const agents = await listAgents({ role, status, organizationId: ctx.organizationId });
     return jsonOk(agents.map(agentToApi));
   } catch (e) {
     return jsonError(e instanceof Error ? e.message : 'Error listando agentes', 500);
@@ -29,9 +29,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const current = await requireUser(request);
-  if (current instanceof Response) return current;
-  if (!canManageAgents(current)) return jsonError('Solo Admin puede crear agentes', 403);
+  const ctx = await requireOrg(request);
+  if (ctx instanceof Response) return ctx;
+  if (!canManageAgents(ctx.user)) return jsonError('Solo Admin puede crear agentes', 403);
 
   const body = (await request.json()) as {
     name?: string;
@@ -48,17 +48,21 @@ export async function POST(request: NextRequest) {
   if (!ALLOWED_ROLES.has(role)) return jsonError('Rol debe ser Marketing o I+D', 400);
 
   const admin = getAdminClient();
-  const { data, error } = await admin
-    .from('agents')
-    .insert({
-      name,
-      prompt,
-      role,
-      status: body.status === 'Inactivo' ? 'Inactivo' : 'Activo',
-      updated_at: new Date().toISOString(),
-    })
-    .select('*')
-    .single();
+  const payload: Record<string, unknown> = {
+    name,
+    prompt,
+    role,
+    status: body.status === 'Inactivo' ? 'Inactivo' : 'Activo',
+    updated_at: new Date().toISOString(),
+    organization_id: ctx.organizationId,
+  };
+  let { data, error } = await admin.from('agents').insert(payload).select('*').single();
+  if (error && /organization_id/i.test(error.message)) {
+    delete payload.organization_id;
+    const retry = await admin.from('agents').insert(payload).select('*').single();
+    data = retry.data;
+    error = retry.error;
+  }
 
   if (error || !data) return jsonError(error?.message || 'Error creando agente', 500);
   return jsonOk(agentToApi(data as DbAgent), { status: 201 });

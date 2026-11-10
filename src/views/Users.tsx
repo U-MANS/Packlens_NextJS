@@ -20,7 +20,7 @@ import { toast } from '../components/ui/Toast';
 import { getErrorMessage } from '../utils/errors';
 import { formatDate } from '../utils/dates';
 import { useAuthStore } from '../store/useAuthStore';
-import type { Role } from '../types';
+import { isOpsAdminRole, isPlatformAdminRole, type Role } from '../types';
 import InvitationsPanel from './InvitationsPanel';
 
 type Dept = Role;
@@ -48,6 +48,8 @@ const DEPT_COLORS: Record<Dept, string> = {
     'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/35',
   Admin:
     'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-500/20 dark:text-slate-300 dark:border-slate-500/30',
+  Manager:
+    'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-500/15 dark:text-sky-300 dark:border-sky-500/35',
 };
 
 const AVATAR_COLORS: Record<Dept, string> = {
@@ -56,9 +58,10 @@ const AVATAR_COLORS: Record<Dept, string> = {
   'I+D': 'bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300',
   Comercial: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300',
   Admin: 'bg-slate-200 text-slate-700 dark:bg-slate-500/25 dark:text-slate-200',
+  Manager: 'bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-300',
 };
 
-const ALL_DEPTS: Dept[] = ['Marketing', 'Diseño', 'I+D', 'Comercial', 'Admin'];
+const ALL_DEPTS: Dept[] = ['Marketing', 'Diseño', 'I+D', 'Comercial', 'Manager', 'Admin'];
 
 const EMPTY_FORM = {
   name: '',
@@ -142,10 +145,11 @@ function useAnchoredMenu(anchorEl: HTMLElement | null, onClose: () => void) {
 interface RoleSelectProps {
   user: AppUser;
   disabled?: boolean;
+  roles?: Dept[];
   onChange: (role: Dept) => void;
 }
 
-function RoleSelect({ user, disabled, onChange }: RoleSelectProps) {
+function RoleSelect({ user, disabled, roles = ALL_DEPTS, onChange }: RoleSelectProps) {
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const { menuRef, style } = useAnchoredMenu(open ? buttonRef.current : null, () => setOpen(false));
@@ -165,7 +169,7 @@ function RoleSelect({ user, disabled, onChange }: RoleSelectProps) {
           DEPT_COLORS[user.role]
         } ${open ? 'ring-2 ring-accent/30' : 'hover:brightness-95 dark:hover:brightness-110'}`}
       >
-        {user.role === 'Admin' && <Shield size={11} />}
+        {isOpsAdminRole(user.role) && <Shield size={11} />}
         {user.role}
         <UserCog size={12} className="opacity-60" />
       </button>
@@ -179,7 +183,7 @@ function RoleSelect({ user, disabled, onChange }: RoleSelectProps) {
             className="w-44 bg-surface border border-border rounded-xl shadow-lg py-1.5"
             onClick={(e) => e.stopPropagation()}
           >
-            {ALL_DEPTS.map((role) => {
+            {roles.map((role) => {
               const selected = role === user.role;
               return (
                 <button
@@ -200,7 +204,7 @@ function RoleSelect({ user, disabled, onChange }: RoleSelectProps) {
                   <span
                     className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold ${DEPT_COLORS[role]}`}
                   >
-                    {role === 'Admin' && <Shield size={10} />}
+                    {isOpsAdminRole(role) && <Shield size={10} />}
                     {role}
                   </span>
                   {selected && <span className="ml-auto text-[10px] text-accent">Actual</span>}
@@ -287,7 +291,11 @@ function UserRowMenu({
 
 export default function Users() {
   const currentUser = useAuthStore((s) => s.user);
-  const isAdmin = currentUser?.role === 'Admin';
+  const isAdmin = isOpsAdminRole(currentUser?.role);
+  const isPlatformAdmin = isPlatformAdminRole(currentUser?.role);
+  const assignableRoles = isPlatformAdmin
+    ? ALL_DEPTS
+    : ALL_DEPTS.filter((r) => r !== 'Admin');
   const [activeTab, setActiveTab] = useState<'team' | 'invitations'>('team');
 
   const [users, setUsers] = useState<AppUser[]>([]);
@@ -553,7 +561,7 @@ export default function Users() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
             <input
               type="text"
-              placeholder="Buscar por nombre, email o departamento…"
+              placeholder="Buscar por nombre, email o departamento"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-9 pr-4 py-2.5 bg-white border border-border rounded-lg text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 transition-all"
@@ -564,7 +572,7 @@ export default function Users() {
             {isLoading ? (
               <div className="py-16 flex flex-col items-center text-slate-400 gap-2">
                 <UsersIcon size={32} className="opacity-30 animate-pulse" />
-                <p className="text-sm">Cargando usuarios…</p>
+                <p className="text-sm">Cargando usuarios</p>
               </div>
             ) : filtered.length === 0 ? (
               <div className="py-16 flex flex-col items-center text-slate-400 gap-2">
@@ -628,9 +636,11 @@ export default function Users() {
                             </div>
                           </td>
                           <td className="px-4 py-4 align-middle">
-                            {isAdmin ? (
+                            {isAdmin &&
+                            (isPlatformAdmin || user.role !== 'Admin') ? (
                               <RoleSelect
                                 user={user}
+                                roles={assignableRoles}
                                 disabled={isSavingRole}
                                 onChange={(role) => void handleInlineRoleChange(user, role)}
                               />
@@ -638,7 +648,7 @@ export default function Users() {
                               <span
                                 className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-xs font-semibold ${DEPT_COLORS[user.role]}`}
                               >
-                                {user.role === 'Admin' && <Shield size={11} />}
+                                {isOpsAdminRole(user.role) && <Shield size={11} />}
                                 {user.role}
                               </span>
                             )}
@@ -737,7 +747,7 @@ export default function Users() {
               disabled={isSubmitting}
               className="px-4 py-2 text-sm font-semibold bg-accent text-white rounded-lg hover:bg-accent-hover transition-colors disabled:opacity-60"
             >
-              {isSubmitting ? 'Creando…' : 'Crear usuario'}
+              {isSubmitting ? 'Creando' : 'Crear usuario'}
             </button>
           </div>
         }
@@ -794,7 +804,7 @@ export default function Users() {
               onChange={(e) => setForm((p) => ({ ...p, role: e.target.value as Dept }))}
               className="w-full px-3 py-2 bg-white border border-border rounded-md text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
             >
-              {ALL_DEPTS.map((role) => (
+              {assignableRoles.map((role) => (
                 <option key={role} value={role}>
                   {role}
                 </option>
@@ -827,7 +837,7 @@ export default function Users() {
               disabled={isSavingRole || roleDraft === roleModalUser?.role}
               className="px-4 py-2 text-sm font-semibold bg-accent text-white rounded-lg hover:bg-accent-hover transition-colors disabled:opacity-60"
             >
-              {isSavingRole ? 'Guardando…' : 'Guardar rol'}
+              {isSavingRole ? 'Guardando' : 'Guardar rol'}
             </button>
           </div>
         }
@@ -842,7 +852,7 @@ export default function Users() {
             onChange={(e) => setRoleDraft(e.target.value as Dept)}
             className="w-full px-3 py-2 bg-white border border-border rounded-md text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
           >
-            {ALL_DEPTS.map((role) => (
+            {assignableRoles.map((role) => (
               <option key={role} value={role}>
                 {role}
               </option>
@@ -878,7 +888,7 @@ export default function Users() {
               disabled={isDeleting}
               className="px-4 py-2 text-sm font-semibold bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-60"
             >
-              {isDeleting ? 'Eliminando…' : 'Eliminar definitivamente'}
+              {isDeleting ? 'Eliminando' : 'Eliminar definitivamente'}
             </button>
           </div>
         }

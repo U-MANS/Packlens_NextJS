@@ -24,6 +24,36 @@ export interface ApiUser {
   initials?: string | null;
   joined_at?: string | null;
   created_at: string;
+  organization_id?: string;
+  organization?: {
+    id: string;
+    slug: string;
+    name: string;
+    template_key: string;
+    status: string;
+  };
+  tenant_config?: import('../lib/tenant/types').TenantConfig;
+  memberships?: Array<{
+    organization_id: string;
+    role: string;
+    status: string;
+    organization: {
+      id: string;
+      slug: string;
+      name: string;
+      template_key: string;
+      status: string;
+    } | null;
+  }>;
+  available_organizations?: Array<{
+    id: string;
+    slug: string;
+    name: string;
+    template_key: string;
+    status: string;
+  }>;
+  is_platform_admin?: boolean;
+  multi_tenant?: boolean;
 }
 
 export interface ApiAttachment {

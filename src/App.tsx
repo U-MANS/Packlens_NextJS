@@ -20,6 +20,7 @@ import LibraryProduct from './views/LibraryProduct';
 import Moodboard from './views/Moodboard';
 import CampaignsCalendar from './views/CampaignsCalendar';
 import HoursControl from './views/HoursControl';
+import AdminOrgSettings from './views/AdminOrgSettings';
 
 function App() {
   return (
@@ -48,6 +49,7 @@ function App() {
             <Route path="hours" element={<HoursControl />} />
             <Route path="users" element={<Users />} />
             <Route path="agents" element={<Agents />} />
+            <Route path="admin/org" element={<AdminOrgSettings />} />
           </Route>
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -1,12 +1,12 @@
 import { NextRequest } from 'next/server';
-import { requireUser } from '@/lib/server/auth';
 import { jsonError, jsonOk } from '@/lib/server/http';
+import { getProjectInOrg, requireOrg } from '@/lib/server/org';
 import { timeEntryToApi, type TimeEntryRow } from '@/lib/server/timeEntries';
 import { getAdminClient } from '@/lib/supabase/admin';
 
 export async function GET(request: NextRequest) {
-  const user = await requireUser(request);
-  if (user instanceof Response) return user;
+  const ctx = await requireOrg(request);
+  if (ctx instanceof Response) return ctx;
 
   const { searchParams } = new URL(request.url);
   const projectId = searchParams.get('project_id');
@@ -17,7 +17,8 @@ export async function GET(request: NextRequest) {
   const admin = getAdminClient();
   let query = admin
     .from('time_entries')
-    .select('*, project:projects(name, sku)')
+    .select('*, project:projects!inner(name, sku, organization_id)')
+    .eq('project.organization_id', ctx.organizationId)
     .order('worked_on', { ascending: false })
     .order('created_at', { ascending: false });
 
@@ -26,7 +27,21 @@ export async function GET(request: NextRequest) {
   if (to) query = query.lte('worked_on', to);
   if (employee?.trim()) query = query.ilike('employee_name', `%${employee.trim()}%`);
 
-  const { data, error } = await query;
+  let { data, error } = await query;
+  if (error && /organization_id/i.test(error.message)) {
+    let fallback = admin
+      .from('time_entries')
+      .select('*, project:projects(name, sku)')
+      .order('worked_on', { ascending: false })
+      .order('created_at', { ascending: false });
+    if (projectId) fallback = fallback.eq('project_id', projectId);
+    if (from) fallback = fallback.gte('worked_on', from);
+    if (to) fallback = fallback.lte('worked_on', to);
+    if (employee?.trim()) fallback = fallback.ilike('employee_name', `%${employee.trim()}%`);
+    const retry = await fallback;
+    data = retry.data;
+    error = retry.error;
+  }
   if (error) return jsonError(error.message, 500);
 
   return jsonOk(
@@ -40,8 +55,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const user = await requireUser(request);
-  if (user instanceof Response) return user;
+  const ctx = await requireOrg(request);
+  if (ctx instanceof Response) return ctx;
+  const user = ctx.user;
 
   const body = (await request.json()) as {
     project_id?: string;
@@ -67,13 +83,10 @@ export async function POST(request: NextRequest) {
   }
 
   const admin = getAdminClient();
-  const { data: project, error: projectError } = await admin
-    .from('projects')
-    .select('id, name, sku')
-    .eq('id', projectId)
-    .maybeSingle();
-  if (projectError) return jsonError(projectError.message, 500);
-  if (!project) return jsonError('Proyecto no encontrado', 404);
+  const scoped = await getProjectInOrg(projectId, ctx.organizationId, 'id, name, sku');
+  if (scoped.error) return jsonError(scoped.error, 500);
+  if (!scoped.data) return jsonError('Proyecto no encontrado', 404);
+  const project = scoped.data as { id: string; name: string; sku: string };
 
   const { data, error } = await admin
     .from('time_entries')

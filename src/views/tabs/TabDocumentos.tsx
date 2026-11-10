@@ -25,7 +25,7 @@ import { formatDate } from '../../utils/dates';
 import type { ProjectPhase } from '../../types';
 import { toast } from '../../components/ui/Toast';
 
-// ─── Phase colours ───────────────────────────────────────────────────────────
+// --- Phase colours -----------------------------------------------------------
 
 const PHASE_STYLE: Record<
   string,
@@ -85,7 +85,7 @@ const phaseStyle = (phase: string) =>
     icon: <FileText size={13} />,
   };
 
-// ─── Document entry ───────────────────────────────────────────────────────────
+// --- Document entry -----------------------------------------------------------
 
 interface DocEntry {
   id: string;
@@ -103,7 +103,7 @@ interface DocEntry {
   proposalName?: string;
 }
 
-// ─── Thumbnail ────────────────────────────────────────────────────────────────
+// --- Thumbnail ----------------------------------------------------------------
 
 const Thumbnail: React.FC<{ entry: DocEntry }> = ({ entry }) => {
   const [thumbUrl, setThumbUrl] = useState<string | null>(null);
@@ -160,7 +160,7 @@ const Thumbnail: React.FC<{ entry: DocEntry }> = ({ entry }) => {
   );
 };
 
-// ─── PDF text analysis panel ──────────────────────────────────────────────────
+// --- PDF text analysis panel --------------------------------------------------
 
 const TextAnalysisPanel: React.FC<{
   fileName: string;
@@ -265,9 +265,9 @@ const TextAnalysisPanel: React.FC<{
   );
 };
 
-// ─── Phase group ─────────────────────────────────────────────────────────────
+// --- Phase group -------------------------------------------------------------
 
-// ─── Per-entry PDF analyse button ─────────────────────────────────────────────
+// --- Per-entry PDF analyse button ---------------------------------------------
 
 const AnalyseButton: React.FC<{ entry: DocEntry }> = ({ entry }) => {
   const [status, setStatus] = useState<'idle' | 'loading' | 'done'>('idle');
@@ -303,7 +303,7 @@ const AnalyseButton: React.FC<{ entry: DocEntry }> = ({ entry }) => {
           <ScanText size={13} />
         )}
         <span className="hidden sm:inline">
-          {status === 'loading' ? 'Analizando…' : status === 'done' ? 'Ver textos' : 'Analizar textos'}
+          {status === 'loading' ? 'Analizando' : status === 'done' ? 'Ver textos' : 'Analizar textos'}
         </span>
       </button>
 
@@ -318,7 +318,7 @@ const AnalyseButton: React.FC<{ entry: DocEntry }> = ({ entry }) => {
   );
 };
 
-// ─── Phase group ─────────────────────────────────────────────────────────────
+// --- Phase group -------------------------------------------------------------
 
 const PhaseGroup: React.FC<{
   phase: string;
@@ -454,7 +454,7 @@ const PhaseGroup: React.FC<{
   );
 };
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// --- Main component -----------------------------------------------------------
 
 export const TabDocumentos = ({ projectId }: { projectId: string }) => {
   const {
@@ -472,12 +472,15 @@ export const TabDocumentos = ({ projectId }: { projectId: string }) => {
   const thumbInputRef = useRef<HTMLInputElement>(null);
 
   const canEditThumbnail =
-    activeRole === 'Admin' || activeRole === 'Marketing' || activeRole === 'Diseño';
+    activeRole === 'Admin' ||
+    activeRole === 'Manager' ||
+    activeRole === 'Marketing' ||
+    activeRole === 'Diseño';
 
   const allEntries = useMemo<DocEntry[]>(() => {
     const entries: DocEntry[] = [];
 
-    // 1 — Briefing files (phase: "Proyecto")
+    // 1  Briefing files (phase: "Proyecto")
     const briefFiles = project?.briefing?.files ?? [];
     briefFiles.forEach((f, i) => {
       entries.push({
@@ -491,7 +494,7 @@ export const TabDocumentos = ({ projectId }: { projectId: string }) => {
         isPdf: f.mimeType === 'application/pdf',
         phase: 'Proyecto',
         uploadedAt: project?.briefing?.uploadedAt ?? project?.createdAt ?? '',
-        uploadedBy: project?.owner ?? '—',
+        uploadedBy: project?.owner ?? '',
         proposalName: 'Briefing creativo',
       });
     });
@@ -508,12 +511,12 @@ export const TabDocumentos = ({ projectId }: { projectId: string }) => {
         isPdf: project.briefing.mimeType === 'application/pdf',
         phase: 'Proyecto',
         uploadedAt: project.briefing.uploadedAt ?? project.createdAt ?? '',
-        uploadedBy: project.owner ?? '—',
+        uploadedBy: project.owner ?? '',
         proposalName: 'Briefing creativo',
       });
     }
 
-    // 2 — Design proposals (Diseño and Creación Desarrollo)
+    // 2  Design proposals (Diseño and Creación Desarrollo)
     const proposals = designProposals
       .filter((dp) => dp.projectId === projectId)
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
@@ -539,7 +542,7 @@ export const TabDocumentos = ({ projectId }: { projectId: string }) => {
       });
     });
 
-    // 3 — Review reference attachments (Aprobación Diseño / Aprobación Legal)
+    // 3  Review reference attachments (Aprobación Diseño / Aprobación Legal)
     const refAtts = reviewRefAttachments.filter((r) => r.projectId === projectId);
     refAtts.forEach((r) => {
       // Determine which phase: find the proposal they're linked to
@@ -567,7 +570,7 @@ export const TabDocumentos = ({ projectId }: { projectId: string }) => {
       });
     });
 
-    // 4 — Arte final
+    // 4  Arte final
     const af = arteFinals
       .filter((a) => a.projectId === projectId)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
@@ -640,7 +643,7 @@ export const TabDocumentos = ({ projectId }: { projectId: string }) => {
     const file = fileList?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) {
-      toast.error('Selecciona una imagen (PNG, JPG, WebP…)');
+      toast.error('Selecciona una imagen (PNG, JPG, WebP)');
       return;
     }
     setUploadingThumb(true);

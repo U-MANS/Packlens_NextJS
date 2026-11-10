@@ -59,6 +59,28 @@ export async function POST(request: NextRequest, context: Ctx) {
       .update({ name, role: invite.role, initials, status: 'Activo' })
       .eq('email', invite.email);
 
+    const { data: profile } = await admin
+      .from('users')
+      .select('id')
+      .eq('email', invite.email)
+      .maybeSingle();
+
+    const orgId =
+      (invite as { organization_id?: string }).organization_id ||
+      'a0000000-0000-4000-8000-000000000001';
+
+    if (profile?.id) {
+      await admin.from('memberships').upsert(
+        {
+          user_id: profile.id,
+          organization_id: orgId,
+          role: invite.role,
+          status: 'Activo',
+        },
+        { onConflict: 'user_id,organization_id' }
+      );
+    }
+
     await admin
       .from('invitations')
       .update({ status: 'accepted', accepted_at: new Date().toISOString() })
