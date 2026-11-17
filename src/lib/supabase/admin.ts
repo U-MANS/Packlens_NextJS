@@ -3,10 +3,10 @@ import { env } from '@/lib/env';
 
 let admin: SupabaseClient | null = null;
 
-/** Cliente con service role — solo en servidor. */
+/** Cliente con secret key (o service_role legacy) — solo en servidor. */
 export function getAdminClient(): SupabaseClient {
   if (!admin) {
-    admin = createClient(env.supabaseUrl(), env.supabaseServiceRoleKey(), {
+    admin = createClient(env.supabaseUrl(), env.supabaseSecretKey(), {
       auth: { autoRefreshToken: false, persistSession: false },
     });
   }

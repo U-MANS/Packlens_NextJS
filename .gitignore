@@ -33,6 +33,8 @@ yarn-error.log*
 # env files (keep example)
 .env*
 !.env.example
+!.env.vercel.helios.example
+!.env.vercel.wework.example
 
 # vercel
 .vercel
@@ -48,5 +50,8 @@ next-env.d.ts
 .claude/
 .windsurf/
 skills-lock.json
+
+# plantillas locales de provisión (orgs / seeds personales)
+/supabase/templates/
 
 .vercel

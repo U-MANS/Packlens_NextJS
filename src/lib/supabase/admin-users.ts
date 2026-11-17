@@ -1,4 +1,8 @@
-import { env } from '@/lib/env';
+import { env, supabaseApiKeyHeaders } from '@/lib/env';
+
+function adminHeaders(): Record<string, string> {
+  return supabaseApiKeyHeaders(env.supabaseSecretKey());
+}
 
 export async function adminCreateUser(payload: {
   email: string;
@@ -9,11 +13,7 @@ export async function adminCreateUser(payload: {
 }): Promise<{ id: string }> {
   const res = await fetch(`${env.supabaseUrl()}/auth/v1/admin/users`, {
     method: 'POST',
-    headers: {
-      apikey: env.supabaseServiceRoleKey(),
-      Authorization: `Bearer ${env.supabaseServiceRoleKey()}`,
-      'Content-Type': 'application/json',
-    },
+    headers: adminHeaders(),
     body: JSON.stringify({
       email: payload.email,
       password: payload.password,
@@ -39,11 +39,7 @@ export async function adminUpdateUserMetadata(
 ): Promise<void> {
   const res = await fetch(`${env.supabaseUrl()}/auth/v1/admin/users/${userId}`, {
     method: 'PUT',
-    headers: {
-      apikey: env.supabaseServiceRoleKey(),
-      Authorization: `Bearer ${env.supabaseServiceRoleKey()}`,
-      'Content-Type': 'application/json',
-    },
+    headers: adminHeaders(),
     body: JSON.stringify({ user_metadata: metadata }),
   });
   if (!res.ok) throw new Error('Error al actualizar usuario');
@@ -53,10 +49,7 @@ export async function adminFindUserByEmail(email: string): Promise<{ id: string 
   const res = await fetch(
     `${env.supabaseUrl()}/auth/v1/admin/users?email=${encodeURIComponent(email)}`,
     {
-      headers: {
-        apikey: env.supabaseServiceRoleKey(),
-        Authorization: `Bearer ${env.supabaseServiceRoleKey()}`,
-      },
+      headers: adminHeaders(),
     },
   );
   if (!res.ok) return null;
@@ -75,11 +68,7 @@ export async function adminUpdateAuthUser(
 ): Promise<void> {
   const res = await fetch(`${env.supabaseUrl()}/auth/v1/admin/users/${userId}`, {
     method: 'PUT',
-    headers: {
-      apikey: env.supabaseServiceRoleKey(),
-      Authorization: `Bearer ${env.supabaseServiceRoleKey()}`,
-      'Content-Type': 'application/json',
-    },
+    headers: adminHeaders(),
     body: JSON.stringify({
       password: payload.password,
       email_confirm: true,
@@ -99,10 +88,7 @@ export async function adminUpdateAuthUser(
 export async function adminDeleteUser(userId: string): Promise<void> {
   const res = await fetch(`${env.supabaseUrl()}/auth/v1/admin/users/${userId}`, {
     method: 'DELETE',
-    headers: {
-      apikey: env.supabaseServiceRoleKey(),
-      Authorization: `Bearer ${env.supabaseServiceRoleKey()}`,
-    },
+    headers: adminHeaders(),
   });
   if (!res.ok && res.status !== 204) {
     const body = (await res.json().catch(() => ({}))) as { msg?: string; message?: string };

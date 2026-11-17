@@ -5,14 +5,19 @@ import type {
 } from './types';
 import { DEFAULT_TEMPLATE_KEY, getTemplate } from './templates';
 
+/** ID fijo histórico de Helios (solo referencia / seeds antiguos). */
 export const HELIOS_ORG_ID = 'a0000000-0000-4000-8000-000000000001';
 export const HELIOS_ORG_SLUG = 'helios';
 
-/** Feature flag: si false, org Helios implícita y config = plantilla helios. */
-export function isMultiTenantEnabled(): boolean {
-  const v = process.env.MULTI_TENANT ?? process.env.NEXT_PUBLIC_MULTI_TENANT;
-  if (v == null || v === '') return true;
-  return v === '1' || v.toLowerCase() === 'true' || v.toLowerCase() === 'yes';
+/** Org opcional de esta instancia si hay más de una fila en la DB. */
+export function defaultOrganizationId(): string | null {
+  const v = process.env.DEFAULT_ORGANIZATION_ID?.trim();
+  return v || null;
+}
+
+export function defaultOrganizationSlug(): string | null {
+  const v = process.env.DEFAULT_ORGANIZATION_SLUG?.trim();
+  return v || null;
 }
 
 export function mergeTenantConfig(

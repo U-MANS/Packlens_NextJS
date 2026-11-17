@@ -1,9 +1,8 @@
 import { getAdminClient } from '@/lib/supabase/admin';
 import { jsonError } from '@/lib/server/http';
 import {
-  HELIOS_ORG_ID,
-  HELIOS_ORG_SLUG,
-  isMultiTenantEnabled,
+  defaultOrganizationId,
+  defaultOrganizationSlug,
   mergeTenantConfig,
 } from '@/lib/tenant/config';
 import type { OrganizationRow, TenantConfig } from '@/lib/tenant/types';
@@ -23,29 +22,14 @@ export type OrgContext = {
   organizationId: string;
   organization: OrganizationRow;
   membership: OrgMembership | null;
-  /** Rol efectivo en el tenant (membership o users.role). */
+  /** Rol efectivo (membership o users.role). */
   role: string;
   config: TenantConfig;
 };
 
-function requestedOrgId(request: Request): string | null {
-  const header =
-    request.headers.get('x-organization-id') ??
-    request.headers.get('X-Organization-Id');
-  if (header?.trim()) return header.trim();
-  try {
-    const url = new URL(request.url);
-    const q = url.searchParams.get('organization_id');
-    if (q?.trim()) return q.trim();
-  } catch {
-    /* ignore */
-  }
-  return null;
-}
-
 async function loadOrganization(
   admin: ReturnType<typeof getAdminClient>,
-  idOrSlug: string
+  idOrSlug: string,
 ): Promise<OrganizationRow | null> {
   const byId = await admin.from('organizations').select('*').eq('id', idOrSlug).maybeSingle();
   if (!byId.error && byId.data) return byId.data as OrganizationRow;
@@ -54,29 +38,39 @@ async function loadOrganization(
   return null;
 }
 
-async function ensureHeliosFallback(
-  admin: ReturnType<typeof getAdminClient>
-): Promise<OrganizationRow> {
-  const existing = await loadOrganization(admin, HELIOS_ORG_ID);
-  if (existing) return existing;
-  const bySlug = await loadOrganization(admin, HELIOS_ORG_SLUG);
-  if (bySlug) return bySlug;
-  return {
-    id: HELIOS_ORG_ID,
-    slug: HELIOS_ORG_SLUG,
-    name: 'Helios',
-    template_key: 'packaging-helios',
-    settings: {},
-    status: 'Activo',
-  };
+/**
+ * Org de esta instancia (1 Supabase = 1 cliente):
+ * 1) DEFAULT_ORGANIZATION_ID
+ * 2) DEFAULT_ORGANIZATION_SLUG
+ * 3) primera org Activa
+ */
+export async function resolveInstanceOrganization(
+  admin: ReturnType<typeof getAdminClient> = getAdminClient(),
+): Promise<OrganizationRow | null> {
+  const byId = defaultOrganizationId();
+  if (byId) {
+    const org = await loadOrganization(admin, byId);
+    if (org?.status === 'Activo') return org;
+  }
+  const bySlug = defaultOrganizationSlug();
+  if (bySlug) {
+    const org = await loadOrganization(admin, bySlug);
+    if (org?.status === 'Activo') return org;
+  }
+
+  const { data, error } = await admin
+    .from('organizations')
+    .select('*')
+    .eq('status', 'Activo')
+    .order('created_at', { ascending: true })
+    .limit(1);
+  if (error || !data?.length) return null;
+  return data[0] as OrganizationRow;
 }
 
 /**
- * Resuelve usuario + organización activa.
- * - No crea memberships en la petición (migración solo vía SQL).
- * - Sin membresía activa autorizada → 403.
- * - Error al consultar memberships → 503 (no concede Helios).
- * - MULTI_TENANT=false → Helios implícita sin upsert.
+ * Resuelve usuario + organización de esta instancia.
+ * Sin selector multi-tenant: siempre la org de la DB/despliegue actual.
  */
 export async function requireOrg(request: Request): Promise<OrgContext | Response> {
   const userOrErr = await requireUser(request);
@@ -84,71 +78,33 @@ export async function requireOrg(request: Request): Promise<OrgContext | Respons
   const user = userOrErr;
   const admin = getAdminClient();
 
-  if (!isMultiTenantEnabled()) {
-    const organization = await ensureHeliosFallback(admin);
-    return {
-      user,
-      organizationId: organization.id,
-      organization,
-      membership: null,
-      role: user.role,
-      config: mergeTenantConfig(organization.template_key, organization.settings),
-    };
+  const organization = await resolveInstanceOrganization(admin);
+  if (!organization) {
+    return jsonError(
+      'No hay organización en esta instancia. Ejecuta el bootstrap SQL (p. ej. 00_bootstrap_greenfield.sql).',
+      503,
+    );
   }
 
-  const { data: memberships, error: memErr } = await admin
+  const { data: membershipRow, error: memErr } = await admin
     .from('memberships')
     .select('*')
     .eq('user_id', user.id)
-    .eq('status', 'Activo');
+    .eq('organization_id', organization.id)
+    .eq('status', 'Activo')
+    .maybeSingle();
 
   if (memErr) {
     console.error('[requireOrg] memberships query failed', memErr.message);
     return jsonError('No se pudo verificar la autorización de organización', 503);
   }
 
-  const list = (memberships || []) as OrgMembership[];
-  const wanted = requestedOrgId(request);
-  /** Admin de plataforma (users.role): puede entrar a cualquier tenant con cabecera explícita. */
-  const isPlatformAdmin = user.role === 'Admin';
-
-  let membership: OrgMembership | null = null;
-  let organization: OrganizationRow | null = null;
-
-  if (wanted) {
-    membership = list.find((m) => m.organization_id === wanted) || null;
-    if (!membership) {
-      if (!isPlatformAdmin) return jsonError('Sin acceso a esta organización', 403);
-      organization = await loadOrganization(admin, wanted);
-      if (!organization || organization.status !== 'Activo') {
-        return jsonError('Organización no encontrada', 404);
-      }
-    }
-  } else if (list.length === 1) {
-    membership = list[0];
-  } else if (list.length > 1) {
-    membership =
-      list.find((m) => m.organization_id === HELIOS_ORG_ID) || list[0] || null;
+  const membership = (membershipRow as OrgMembership | null) ?? null;
+  if (!membership && user.role !== 'Admin') {
+    return jsonError('Sin acceso a esta organización', 403);
   }
 
-  if (membership && !organization) {
-    organization = await loadOrganization(admin, membership.organization_id);
-    if (!organization) {
-      return jsonError('Organización de la membresía no encontrada', 403);
-    }
-  }
-
-  // Sin membresía y sin org por header:
-  // - Usuario normal → 403 (nunca upsert / reactivar Helios).
-  // - Admin plataforma → puede operar sobre Helios sin crear membership.
-  if (!organization) {
-    if (!isPlatformAdmin) {
-      return jsonError('Sin organización asignada. Contacta con un administrador.', 403);
-    }
-    organization = await ensureHeliosFallback(admin);
-  }
-
-  const role = membership?.role || (isPlatformAdmin ? 'Admin' : user.role);
+  const role = membership?.role || user.role;
   return {
     user: { ...user, role },
     organizationId: organization.id,
@@ -159,32 +115,15 @@ export async function requireOrg(request: Request): Promise<OrgContext | Respons
   };
 }
 
-export async function listAllOrganizations(): Promise<
-  Array<{ id: string; slug: string; name: string; template_key: string; status: string }>
-> {
+export async function listUserMemberships(userId: string, organizationId?: string) {
   const admin = getAdminClient();
-  const { data, error } = await admin
-    .from('organizations')
-    .select('id, slug, name, template_key, status')
-    .eq('status', 'Activo')
-    .order('name');
-  if (error) return [];
-  return (data || []) as Array<{
-    id: string;
-    slug: string;
-    name: string;
-    template_key: string;
-    status: string;
-  }>;
-}
-
-export async function listUserMemberships(userId: string) {
-  const admin = getAdminClient();
-  const { data: memberships } = await admin
+  let query = admin
     .from('memberships')
     .select('*, organizations(*)')
     .eq('user_id', userId)
     .eq('status', 'Activo');
+  if (organizationId) query = query.eq('organization_id', organizationId);
+  const { data: memberships } = await query;
   return memberships || [];
 }
 
@@ -192,7 +131,7 @@ export async function listUserMemberships(userId: string) {
 export async function getProjectInOrg(
   projectId: string,
   organizationId: string,
-  columns = '*'
+  columns = '*',
 ): Promise<{ data: Record<string, unknown> | null; error: string | null }> {
   const admin = getAdminClient();
   const { data, error } = await admin
@@ -203,7 +142,6 @@ export async function getProjectInOrg(
     .maybeSingle();
 
   if (error) {
-    // Columna organization_id aún no existe → fallback sin filtro (pre-migración)
     if (/organization_id/i.test(error.message)) {
       const fallback = await admin.from('projects').select(columns).eq('id', projectId).maybeSingle();
       if (fallback.error) return { data: null, error: fallback.error.message };
@@ -221,13 +159,12 @@ export async function getProjectInOrg(
 }
 
 /**
- * Mutación acotada al tenant. Si el id no pertenece a la org → not_found (404).
- * Nunca actualiza solo por id.
+ * Mutación acotada a la org de la instancia. Si el id no pertenece → not_found (404).
  */
 export async function updateProjectInOrg(
   projectId: string,
   organizationId: string,
-  updates: Record<string, unknown>
+  updates: Record<string, unknown>,
 ): Promise<{ error: string | null; notFound?: boolean }> {
   const admin = getAdminClient();
   const { data, error } = await admin

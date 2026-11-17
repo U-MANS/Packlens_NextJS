@@ -40,8 +40,8 @@ Abre **http://localhost:3000**
 |----------|-----|
 | `NEXT_PUBLIC_API_URL` | Base del cliente (`/api/v1`) |
 | `SUPABASE_URL` | Proyecto Supabase |
-| `SUPABASE_ANON_KEY` | Auth |
-| `SUPABASE_SERVICE_ROLE_KEY` | Consultas server-side + Storage |
+| `SUPABASE_PUBLISHABLE_KEY` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Auth (antes `anon`) |
+| `SUPABASE_SECRET_KEY` | Server + Storage (antes `service_role`) |
 | `DEBUG_ENABLE_SIGNUP` | Solo local: habilita `/auth/debug/register` (ignorado en `production`; nunca Admin/Manager) |
 
 ## Estructura

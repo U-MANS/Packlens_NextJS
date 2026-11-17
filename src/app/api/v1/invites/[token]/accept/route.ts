@@ -65,9 +65,15 @@ export async function POST(request: NextRequest, context: Ctx) {
       .eq('email', invite.email)
       .maybeSingle();
 
-    const orgId =
-      (invite as { organization_id?: string }).organization_id ||
-      'a0000000-0000-4000-8000-000000000001';
+    let orgId = (invite as { organization_id?: string | null }).organization_id || null;
+    if (!orgId) {
+      const { resolveInstanceOrganization } = await import('@/lib/server/org');
+      const instanceOrg = await resolveInstanceOrganization(admin);
+      orgId = instanceOrg?.id ?? null;
+    }
+    if (!orgId) {
+      return jsonError('No hay organización en esta instancia para aceptar la invitación', 503);
+    }
 
     if (profile?.id) {
       await admin.from('memberships').upsert(

@@ -42,21 +42,12 @@ const NAV_ICONS: Record<string, typeof LayoutDashboard> = {
 const Layout = () => {
   const activeRole = useAppStore((s) => s.activeRole);
   const setActiveRole = useAppStore((s) => s.setActiveRole);
-  const {
-    user,
-    logout,
-    organization,
-    tenantConfig,
-    availableOrganizations,
-    isPlatformAdmin,
-    setOrganizationId,
-  } = useAuthStore();
+  const { user, logout, organization, tenantConfig } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
   const unreadCount = useNotificationStore((s) => s.unreadCount);
   const refreshUnreadCount = useNotificationStore((s) => s.refreshUnreadCount);
   const [notifPanelOpen, setNotifPanelOpen] = useState(false);
-  const [switchingOrg, setSwitchingOrg] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
 
   const config = tenantConfig || PACKAGING_HELIOS;
@@ -112,20 +103,6 @@ const Layout = () => {
 
   const canSimulateRoles = isOpsAdminRole(user?.role);
   const brandName = organization?.name || 'PackLens';
-  const showTenantSwitcher = isPlatformAdmin
-    ? availableOrganizations.length > 0
-    : availableOrganizations.length > 1;
-
-  const handleTenantChange = async (orgId: string) => {
-    if (!orgId || orgId === organization?.id) return;
-    setSwitchingOrg(true);
-    try {
-      await setOrganizationId(orgId);
-      navigate('/');
-    } finally {
-      setSwitchingOrg(false);
-    }
-  };
 
   const renderNavLinks = (adminOnly: boolean) =>
     navItems
@@ -227,22 +204,6 @@ const Layout = () => {
               <div className="text-right hidden md:block">
                 <p className="text-sm font-medium text-primary">{user.name}</p>
                 <div className="mt-0.5 flex items-center justify-end gap-1.5 flex-wrap">
-                  {showTenantSwitcher && (
-                    <select
-                      value={organization?.id || ''}
-                      disabled={switchingOrg}
-                      onChange={(e) => void handleTenantChange(e.target.value)}
-                      title="Cambiar de tenant / cliente"
-                      aria-label="Cambiar de tenant o cliente"
-                      className="text-xs text-slate-600 bg-slate-100 border border-slate-200 rounded px-2 py-0.5 cursor-pointer hover:border-accent focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 disabled:opacity-60 max-w-[140px]"
-                    >
-                      {availableOrganizations.map((org) => (
-                        <option key={org.id} value={org.id}>
-                          {org.name}
-                        </option>
-                      ))}
-                    </select>
-                  )}
                   {canSimulateRoles ? (
                     <select
                       value={activeRole}

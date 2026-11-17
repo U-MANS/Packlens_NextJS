@@ -242,23 +242,23 @@ export type AttachmentRow = {
   created_at: string;
 };
 
-export async function createAttachmentFromFile(
-  file: File,
+export async function createAttachmentFromBuffer(
+  buffer: Buffer,
+  fileName: string,
   prefix: string,
+  mimeType = 'application/octet-stream',
 ): Promise<AttachmentRow> {
-  const fileName = file.name || 'file';
-  const mimeType = file.type || 'application/octet-stream';
-  const buffer = Buffer.from(await file.arrayBuffer());
+  const safeName = fileName || 'file';
   const sizeKb = Math.max(1, Math.floor(buffer.length / 1024));
-  const storageKey = generateStorageKey(prefix, fileName);
+  const storageKey = generateStorageKey(prefix, safeName);
   await uploadBytes(buffer, storageKey, mimeType);
-  const flags = detectFlags(mimeType, fileName);
+  const flags = detectFlags(mimeType, safeName);
 
   const admin = getAdminClient();
   const { data, error } = await admin
     .from('attachments')
     .insert({
-      file_name: fileName,
+      file_name: safeName,
       mime_type: mimeType,
       file_size_kb: sizeKb,
       storage_key: storageKey,
@@ -269,6 +269,16 @@ export async function createAttachmentFromFile(
 
   if (error || !data) throw new Error(error?.message || 'No se pudo crear attachment');
   return data as AttachmentRow;
+}
+
+export async function createAttachmentFromFile(
+  file: File,
+  prefix: string,
+): Promise<AttachmentRow> {
+  const fileName = file.name || 'file';
+  const mimeType = file.type || 'application/octet-stream';
+  const buffer = Buffer.from(await file.arrayBuffer());
+  return createAttachmentFromBuffer(buffer, fileName, prefix, mimeType);
 }
 
 export async function createAttachmentFromMeta(payload: {

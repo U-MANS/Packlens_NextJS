@@ -6,7 +6,6 @@ import {
   setTokenRefreshHandler,
   resetTokenRefreshGate,
   ApiError,
-  setActiveOrganizationId,
 } from '../api/client';
 import type { TenantConfig } from '../lib/tenant/types';
 import type { Role } from '../types';
@@ -42,8 +41,6 @@ interface AuthState {
     role: string;
     organization: AuthOrganization | null;
   }>;
-  availableOrganizations: AuthOrganization[];
-  isPlatformAdmin: boolean;
   isHydrated: boolean;
   isLoading: boolean;
   error: string | null;
@@ -62,13 +59,11 @@ interface AuthState {
   clearError: () => void;
   /** Actualiza campos del usuario en sesión (p. ej. tras cambiarse el rol a sí mismo). */
   patchSessionUser: (partial: Partial<AuthUser>) => void;
-  setOrganizationId: (id: string) => Promise<void>;
   applyMe: (me: ApiUser) => void;
 }
 
 function applyMeToState(me: ApiUser) {
   const organization = me.organization ?? null;
-  if (organization?.id) setActiveOrganizationId(organization.id);
   return {
     user: {
       id: me.id,
@@ -84,26 +79,29 @@ function applyMeToState(me: ApiUser) {
       role: m.role,
       organization: m.organization,
     })),
-    availableOrganizations: me.available_organizations || [],
-    isPlatformAdmin: Boolean(me.is_platform_admin),
   };
 }
 
-function syncLocalCampaignsScope(userId: string | null | undefined, organizationId: string | null | undefined) {
+function syncLocalCampaignsScope(
+  userId: string | null | undefined,
+  organizationId: string | null | undefined,
+) {
   void bindLocalCampaignsScope(userId, organizationId);
 }
+
+const clearedSession = {
+  accessToken: null as string | null,
+  refreshToken: null as string | null,
+  user: null as AuthUser | null,
+  organization: null as AuthOrganization | null,
+  tenantConfig: null as TenantConfig | null,
+  memberships: [] as AuthState['memberships'],
+};
 
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
-      accessToken: null,
-      refreshToken: null,
-      user: null,
-      organization: null,
-      tenantConfig: null,
-      memberships: [],
-      availableOrganizations: [],
-      isPlatformAdmin: false,
+      ...clearedSession,
       isHydrated: false,
       isLoading: false,
       error: null,
@@ -131,18 +129,7 @@ export const useAuthStore = create<AuthState>()(
           const msg = e instanceof Error ? e.message : 'Error de autenticación';
           void clearLocalCampaignsScope();
           resetTokenRefreshGate();
-          set({
-            isLoading: false,
-            error: msg,
-            accessToken: null,
-            refreshToken: null,
-            user: null,
-            organization: null,
-            tenantConfig: null,
-            memberships: [],
-            availableOrganizations: [],
-            isPlatformAdmin: false,
-          });
+          set({ isLoading: false, error: msg, ...clearedSession });
           throw e;
         }
       },
@@ -164,18 +151,7 @@ export const useAuthStore = create<AuthState>()(
           const msg = e instanceof Error ? e.message : 'Error al registrar';
           void clearLocalCampaignsScope();
           resetTokenRefreshGate();
-          set({
-            isLoading: false,
-            error: msg,
-            accessToken: null,
-            refreshToken: null,
-            user: null,
-            organization: null,
-            tenantConfig: null,
-            memberships: [],
-            availableOrganizations: [],
-            isPlatformAdmin: false,
-          });
+          set({ isLoading: false, error: msg, ...clearedSession });
           throw e;
         }
       },
@@ -197,18 +173,7 @@ export const useAuthStore = create<AuthState>()(
           const msg = e instanceof Error ? e.message : 'Error al aceptar invitación';
           void clearLocalCampaignsScope();
           resetTokenRefreshGate();
-          set({
-            isLoading: false,
-            error: msg,
-            accessToken: null,
-            refreshToken: null,
-            user: null,
-            organization: null,
-            tenantConfig: null,
-            memberships: [],
-            availableOrganizations: [],
-            isPlatformAdmin: false,
-          });
+          set({ isLoading: false, error: msg, ...clearedSession });
           throw e;
         }
       },
@@ -220,19 +185,9 @@ export const useAuthStore = create<AuthState>()(
         } catch {
           // ignore
         }
-        setActiveOrganizationId(null);
         void clearLocalCampaignsScope();
         resetTokenRefreshGate();
-        set({
-          accessToken: null,
-          refreshToken: null,
-          user: null,
-          organization: null,
-          tenantConfig: null,
-          memberships: [],
-          availableOrganizations: [],
-          isPlatformAdmin: false,
-        });
+        set({ ...clearedSession });
       },
 
       restoreSession: async () => {
@@ -281,18 +236,10 @@ export const useAuthStore = create<AuthState>()(
 
           throw new Error('Sin sesión válida');
         } catch {
-          setActiveOrganizationId(null);
           void clearLocalCampaignsScope();
           resetTokenRefreshGate();
           set({
-            accessToken: null,
-            refreshToken: null,
-            user: null,
-            organization: null,
-            tenantConfig: null,
-            memberships: [],
-            availableOrganizations: [],
-            isPlatformAdmin: false,
+            ...clearedSession,
             isLoading: false,
             isHydrated: true,
           });
@@ -307,18 +254,6 @@ export const useAuthStore = create<AuthState>()(
         if (!current) return;
         set({ user: { ...current, ...partial } });
       },
-
-      setOrganizationId: async (id: string) => {
-        setActiveOrganizationId(id);
-        const me = await api.getMe();
-        const next = applyMeToState(me);
-        set(next);
-        syncLocalCampaignsScope(next.user.id, next.organization?.id);
-        // Forzar recarga de proyectos/datos del tenant activo
-        const { useAppStore } = await import('./useAppStore');
-        useAppStore.setState({ isBootstrapped: false });
-        await useAppStore.getState().bootstrap();
-      },
     }),
     {
       name: 'packlens-auth',
@@ -330,7 +265,6 @@ export const useAuthStore = create<AuthState>()(
         organization: s.organization,
       }),
       onRehydrateStorage: () => (state) => {
-        if (state?.organization?.id) setActiveOrganizationId(state.organization.id);
         state?.restoreSession();
       },
     },

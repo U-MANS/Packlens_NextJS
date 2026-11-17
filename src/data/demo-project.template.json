@@ -1,5 +1,5 @@
 {
-  "$schema_note": "Plantilla de proyecto demo PackLens. Los nombres de usuarios se resuelven por rol si no existen exactamente.",
+  "$schema_note": "Plantilla de proyecto demo PackLens. Empaqueta como ZIP: demo-project.json + files/* referenciados en proposals[].files. Los nombres de usuarios se resuelven por rol si no existen exactamente.",
   "project": {
     "name": "Mermelada de Albaricoque Premium 340g",
     "sku": "DEMO-ALB-340",
@@ -12,10 +12,10 @@
     "label_languages_back": ["Español", "Portugués", "Francés"],
     "launch_date": "2026-11-15",
     "art_deadline": "2026-09-30",
-    "description": "Proyecto demo con historial completo de fases, propuestas, tareas y comentarios.",
+    "description": "Proyecto demo con historial completo de fases, propuestas, tareas y comentarios. Todas las fases de revisión quedan aprobadas.",
     "briefing_notes": "Marca ALBA Premium.\nFondo crema y verde salvia.\nIlustración de albaricoques maduros.\nClaim: Sin azúcares añadidos.\nIncluir semáforo nutricional y tabla de alérgenos 2024.\nTipografía: Montserrat Bold en claim.",
-    "phase": "Validación diseño",
-    "status": "En validación diseño",
+    "phase": "Aprobado",
+    "status": "Aprobado",
     "lifecycle_status": "Borrador",
     "owner_role": "Marketing",
     "design_lead_role": "Diseño",
@@ -28,7 +28,8 @@
       "comments": "Primera entrega. Fondo crema, claim centrado, ilustración lateral.",
       "uploaded_role": "Diseño",
       "uploaded_phase": "Diseño",
-      "days_ago": 18
+      "days_ago": 18,
+      "files": ["files/propuesta-v1.pdf"]
     },
     {
       "name": "Revisión — tapón verde salvia",
@@ -36,10 +37,18 @@
       "comments": "Ajuste de color de tapón a verde salvia según feedback Marketing. Semáforo nutricional ampliado.",
       "uploaded_role": "Diseño",
       "uploaded_phase": "Creación Desarrollo",
-      "days_ago": 7
+      "days_ago": 7,
+      "files": ["files/propuesta-v2.pdf"]
     }
   ],
   "phase_actions": [
+    {
+      "phase": "Aprobación Diseño",
+      "type": "reject",
+      "comment": "El semáforo nutricional queda demasiado pequeño. Ampliar un 20%.",
+      "actor_role": "Marketing",
+      "days_ago": 16
+    },
     {
       "phase": "Aprobación Diseño",
       "type": "approve",
@@ -52,14 +61,35 @@
       "type": "comment",
       "comment": "Revisar contraste del claim en la zona inferior. Pendiente de maqueta actualizada.",
       "actor_role": "Marketing",
+      "days_ago": 5
+    },
+    {
+      "phase": "Validación diseño",
+      "type": "approve",
+      "comment": "Validación de diseño OK. Contraste corregido.",
+      "actor_role": "Marketing",
+      "days_ago": 4
+    },
+    {
+      "phase": "Aprobación Legal",
+      "type": "approve",
+      "comment": "Claim y semáforo nutricional conformes para ES/PT/FR.",
+      "actor_role": "I+D",
       "days_ago": 3
     },
     {
-      "phase": "Aprobación Diseño",
-      "type": "reject",
-      "comment": "El semáforo nutricional queda demasiado pequeño. Ampliar un 20%.",
+      "phase": "Arte final",
+      "type": "approve",
+      "comment": "Arte final revisado y listo para aprobación final.",
+      "actor_role": "Diseño",
+      "days_ago": 2
+    },
+    {
+      "phase": "Aprobación final",
+      "type": "approve",
+      "comment": "Aprobado para producción.",
       "actor_role": "Marketing",
-      "days_ago": 12
+      "days_ago": 1
     }
   ],
   "activity": [
@@ -85,7 +115,13 @@
       "type": "REVIEW_REJECTED",
       "text": "Rechazó la fase Aprobación Diseño: El semáforo nutricional queda demasiado pequeño. Ampliar un 20%.",
       "actor_role": "Marketing",
-      "days_ago": 12
+      "days_ago": 16
+    },
+    {
+      "type": "REVIEW_APPROVED",
+      "text": "Aprobó la fase Aprobación Diseño: OK para seguir. Cambiar tapón a verde salvia en la siguiente entrega.",
+      "actor_role": "Marketing",
+      "days_ago": 14
     },
     {
       "type": "DOCUMENT_UPLOADED",
@@ -101,9 +137,39 @@
     },
     {
       "type": "REVIEW_APPROVED",
-      "text": "Aprobó la fase Aprobación Diseño: OK para seguir. Cambiar tapón a verde salvia en la siguiente entrega.",
+      "text": "Aprobó la fase Validación diseño: Validación de diseño OK.",
       "actor_role": "Marketing",
-      "days_ago": 14
+      "days_ago": 4
+    },
+    {
+      "type": "REVIEW_APPROVED",
+      "text": "Aprobó la fase Aprobación Legal: Claim y semáforo nutricional conformes.",
+      "actor_role": "I+D",
+      "days_ago": 3
+    },
+    {
+      "type": "PHASE_CHANGED",
+      "text": "Fase cambiada a Arte final (gate paralelo superado)",
+      "actor_role": "Admin",
+      "days_ago": 3
+    },
+    {
+      "type": "REVIEW_APPROVED",
+      "text": "Aprobó la fase Arte final: Arte final revisado.",
+      "actor_role": "Diseño",
+      "days_ago": 2
+    },
+    {
+      "type": "REVIEW_APPROVED",
+      "text": "Aprobó la fase Aprobación final: Aprobado para producción.",
+      "actor_role": "Marketing",
+      "days_ago": 1
+    },
+    {
+      "type": "PHASE_CHANGED",
+      "text": "Proyecto marcado como Aprobado",
+      "actor_role": "Marketing",
+      "days_ago": 1
     }
   ],
   "tasks": [
@@ -117,23 +183,23 @@
     {
       "title": "Validar claim «Sin azúcares añadidos» con Legal",
       "role": "I+D",
-      "status": "Pendiente",
+      "status": "Completada",
       "priority": "Alta",
-      "due_days_from_now": 5
+      "due_days_from_now": -2
     },
     {
       "title": "Preparar maqueta para foto pack",
       "role": "Diseño",
-      "status": "Pendiente",
+      "status": "Completada",
       "priority": "Media",
-      "due_days_from_now": 10
+      "due_days_from_now": -1
     }
   ],
   "comments": [
     {
       "text": "¿Podemos probar una variante con fondo más cálido (beige) para export FR?",
       "role": "Marketing",
-      "resolved": false,
+      "resolved": true,
       "days_ago": 4
     },
     {

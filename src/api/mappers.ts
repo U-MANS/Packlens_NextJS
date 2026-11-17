@@ -45,15 +45,7 @@ export interface ApiUser {
       status: string;
     } | null;
   }>;
-  available_organizations?: Array<{
-    id: string;
-    slug: string;
-    name: string;
-    template_key: string;
-    status: string;
-  }>;
   is_platform_admin?: boolean;
-  multi_tenant?: boolean;
 }
 
 export interface ApiAttachment {

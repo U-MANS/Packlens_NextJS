@@ -15,14 +15,13 @@ import {
   X,
 } from 'lucide-react';
 
-import { createDemoProject } from '../api';
 import { Card, CardHeader } from '../components/ui/Card';
 import { StatusBadge } from '../components/ui/Badge';
-import { toast } from '../components/ui/Toast';
+import { DemoProjectModal } from '../components/modals/DemoProjectModal';
+import { Modal } from '../components/ui/Modal';
 import { useAppStore } from '../store/useAppStore';
 import { useAuthStore } from '../store/useAuthStore';
 import type { LifecycleStatus, Project } from '../types';
-import { getErrorMessage } from '../utils/errors';
 import { isPhaseOwnedByRole, phasesOwnedByRole } from '../utils/phase';
 import { filterProjectsForRole, isComercialView } from '../utils/roles';
 import { projectMatchesSearch } from '../utils/projectSearch';
@@ -105,18 +104,24 @@ const RowMenu: React.FC<RowMenuProps> = ({
   }, [anchorEl]);
 
   useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (
-        menuRef.current &&
-        !menuRef.current.contains(e.target as Node) &&
-        anchorEl &&
-        !anchorEl.contains(e.target as Node)
-      ) {
-        onClose();
-      }
+    // Defer so the opening click does not immediately close the menu.
+    const handlePointer = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (menuRef.current?.contains(target) || anchorEl?.contains(target)) return;
+      onClose();
     };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    const timer = window.setTimeout(() => {
+      document.addEventListener('mousedown', handlePointer);
+      document.addEventListener('keydown', handleKey);
+    }, 0);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener('mousedown', handlePointer);
+      document.removeEventListener('keydown', handleKey);
+    };
   }, [onClose, anchorEl]);
 
   const item = (
@@ -127,7 +132,12 @@ const RowMenu: React.FC<RowMenuProps> = ({
   ) => (
     <button
       type="button"
-      onClick={() => { action(); onClose(); }}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        action();
+        onClose();
+      }}
       className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm rounded-md transition-colors text-left ${
         danger
           ? 'text-red-600 hover:bg-red-50'
@@ -143,8 +153,10 @@ const RowMenu: React.FC<RowMenuProps> = ({
     <div
       ref={menuRef}
       style={style}
+      role="menu"
       className="w-56 bg-white border border-border rounded-xl shadow-lg py-1.5"
       onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
     >
       {item(<Eye size={15} className="text-slate-400" />, 'Ver proyecto', onView)}
       <div className="border-t border-border my-1" />
@@ -165,17 +177,119 @@ const RowMenu: React.FC<RowMenuProps> = ({
   );
 };
 
+// --- Delete confirmation ------------------------------------------------------
+
+type DeleteProjectModalProps = {
+  project: Project | null;
+  open: boolean;
+  onClose: () => void;
+};
+
+const DeleteProjectModal: React.FC<DeleteProjectModalProps> = ({ project, open, onClose }) => {
+  const deleteProject = useAppStore((s) => s.deleteProject);
+  const [confirmName, setConfirmName] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setConfirmName('');
+      setSubmitting(false);
+    }
+  }, [open]);
+
+  const nameMatches =
+    !!project && confirmName.trim() === project.name.trim();
+
+  const handleDelete = async () => {
+    if (!project || !nameMatches || submitting) return;
+    setSubmitting(true);
+    try {
+      await deleteProject(project.id);
+      onClose();
+    } catch {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Eliminar proyecto"
+      description="Esta acción archiva el proyecto y lo quita del listado activo. Para confirmar, escribe el nombre exacto del proyecto."
+      size="md"
+      preventClose={submitting}
+      footer={
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 w-full">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={submitting}
+            className="px-4 py-2 rounded-md border border-border bg-surface text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleDelete()}
+            disabled={!nameMatches || submitting}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md bg-red-600 hover:bg-red-700 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Trash2 size={16} />
+            {submitting ? 'Eliminando…' : 'Eliminar definitivamente'}
+          </button>
+        </div>
+      }
+    >
+      {project && (
+        <div className="space-y-4">
+          <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+            Vas a eliminar <span className="font-semibold">{project.name}</span>
+            <span className="font-mono text-xs text-red-700/80 ml-2">{project.sku}</span>
+          </div>
+          <div>
+            <label htmlFor="delete-project-confirm" className="block text-sm font-medium text-slate-700 mb-1.5">
+              Escribe <span className="font-semibold text-slate-900">{project.name}</span> para confirmar
+            </label>
+            <input
+              id="delete-project-confirm"
+              type="text"
+              autoComplete="off"
+              value={confirmName}
+              onChange={(e) => setConfirmName(e.target.value)}
+              placeholder={project.name}
+              className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-red-200 focus:border-red-400"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  void handleDelete();
+                }
+              }}
+            />
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+};
+
 // --- Row ---------------------------------------------------------------------
 
 interface ProjectRowProps {
   project: Project;
   openMenuId: string | null;
   setOpenMenuId: (id: string | null) => void;
+  onRequestDelete: (project: Project) => void;
 }
 
-const ProjectRow: React.FC<ProjectRowProps> = ({ project, openMenuId, setOpenMenuId }) => {
+const ProjectRow: React.FC<ProjectRowProps> = ({
+  project,
+  openMenuId,
+  setOpenMenuId,
+  onRequestDelete,
+}) => {
   const navigate = useNavigate();
-  const { deleteProject, markDiscontinued } = useAppStore();
+  const markDiscontinued = useAppStore((s) => s.markDiscontinued);
   const btnRef = useRef<HTMLButtonElement | null>(null);
   const thumbRef = useRef<HTMLSpanElement | null>(null);
   const [thumbHover, setThumbHover] = useState(false);
@@ -286,19 +400,30 @@ const ProjectRow: React.FC<ProjectRowProps> = ({ project, openMenuId, setOpenMen
         {formatDate(targetIso)}
       </td>
       {/* Actions cell */}
-      <td className="px-4 py-4 w-12" onClick={(e) => e.stopPropagation()}>
+      <td
+        className="px-4 py-4 w-12"
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
         <div className="relative flex justify-end">
           <button
             ref={btnRef}
             type="button"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
             onClick={(e) => {
+              e.preventDefault();
               e.stopPropagation();
               setOpenMenuId(menuOpen ? null : project.id);
             }}
             className={`p-1.5 rounded-md transition-colors ${
               menuOpen
-                ? 'bg-slate-200 text-slate-700'
-                : 'text-slate-400 opacity-0 group-hover:opacity-100 hover:bg-slate-100 hover:text-slate-700'
+                ? 'bg-slate-200 text-slate-700 opacity-100'
+                : 'text-slate-400 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 hover:bg-slate-100 hover:text-slate-700'
             }`}
             title="Opciones"
           >
@@ -313,7 +438,7 @@ const ProjectRow: React.FC<ProjectRowProps> = ({ project, openMenuId, setOpenMen
               onView={() => navigate(`/projects/${project.id}`)}
               onNewVersion={() => navigate(`/projects/new?from=${project.id}`)}
               onDiscontinue={() => void markDiscontinued(project.id)}
-              onDelete={() => void deleteProject(project.id)}
+              onDelete={() => onRequestDelete(project)}
             />
           )}
         </div>
@@ -327,7 +452,7 @@ const ProjectRow: React.FC<ProjectRowProps> = ({ project, openMenuId, setOpenMen
 const ProjectList = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { projects, activeRole, bootstrap, refreshProjects } = useAppStore();
+  const { projects, activeRole, refreshProjects } = useAppStore();
   const user = useAuthStore((s) => s.user);
   const isAdmin = user?.role === 'Admin' || user?.role === 'Manager';
   const isComercial = isComercialView(activeRole);
@@ -342,34 +467,13 @@ const ProjectList = () => {
     isComercial ? 'Vigente' : 'Todos',
   );
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const [creatingDemo, setCreatingDemo] = useState(false);
+  const [demoModalOpen, setDemoModalOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
 
-  // Al entrar en /projects, sincroniza con el servidor (altas, versiones, ciclos).
+  // Al entrar en /projects, sincroniza con el servidor (altas, versiones, ciclos).
   useEffect(() => {
     void refreshProjects();
   }, [refreshProjects]);
-
-  const handleCreateDemo = async () => {
-    if (creatingDemo) return;
-    setCreatingDemo(true);
-    try {
-      const result = await createDemoProject();
-      await bootstrap();
-      toast.success(result.message || 'Proyecto demo creado');
-      navigate(`/projects/${result.project.id}`);
-    } catch (e) {
-      toast.error(getErrorMessage(e, 'No se pudo crear el proyecto demo'));
-    } finally {
-      setCreatingDemo(false);
-    }
-  };
-
-  // Close menu when clicking anywhere outside a row
-  useEffect(() => {
-    const close = () => setOpenMenuId(null);
-    document.addEventListener('click', close);
-    return () => document.removeEventListener('click', close);
-  }, []);
 
   useEffect(() => {
     if (!openMenuId) return;
@@ -456,13 +560,12 @@ const ProjectList = () => {
             {isAdmin && (
               <button
                 type="button"
-                onClick={() => void handleCreateDemo()}
-                disabled={creatingDemo}
-                title="Crea un proyecto de ejemplo con fases, propuestas, tareas y comentarios"
-                className="flex items-center gap-2 border border-border bg-surface hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-md font-medium transition-colors disabled:opacity-60"
+                onClick={() => setDemoModalOpen(true)}
+                title="Importa un proyecto de ejemplo desde una plantilla JSON"
+                className="flex items-center gap-2 border border-border bg-surface hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-md font-medium transition-colors"
               >
                 <FlaskConical size={16} />
-                {creatingDemo ? 'Creando demo' : 'Proyecto demo'}
+                Proyecto demo
               </button>
             )}
             <button
@@ -475,6 +578,16 @@ const ProjectList = () => {
           </div>
         )}
       </div>
+
+      {isAdmin && (
+        <DemoProjectModal open={demoModalOpen} onClose={() => setDemoModalOpen(false)} />
+      )}
+
+      <DeleteProjectModal
+        project={deleteTarget}
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+      />
 
       {awaitingMe && (
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
@@ -584,6 +697,10 @@ const ProjectList = () => {
                     project={project}
                     openMenuId={openMenuId}
                     setOpenMenuId={setOpenMenuId}
+                    onRequestDelete={(p) => {
+                      setOpenMenuId(null);
+                      setDeleteTarget(p);
+                    }}
                   />
                 ))
               ) : (

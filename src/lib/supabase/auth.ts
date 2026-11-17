@@ -1,4 +1,4 @@
-import { env } from '@/lib/env';
+import { env, supabaseApiKeyHeaders } from '@/lib/env';
 
 export class SupabaseAuthError extends Error {
   status: number;
@@ -17,13 +17,9 @@ type TokenPayload = {
   user?: { id: string; email?: string };
 };
 
-function authHeaders(useServiceRole = false): HeadersInit {
-  const key = useServiceRole ? env.supabaseServiceRoleKey() : env.supabaseAnonKey();
-  return {
-    apikey: key,
-    Authorization: `Bearer ${key}`,
-    'Content-Type': 'application/json',
-  };
+function authHeaders(useSecret = false): HeadersInit {
+  const key = useSecret ? env.supabaseSecretKey() : env.supabasePublishableKey();
+  return supabaseApiKeyHeaders(key);
 }
 
 async function parseError(res: Response, fallback: string): Promise<string> {
@@ -74,10 +70,12 @@ export async function signOut(accessToken: string, refreshToken: string): Promis
   });
 }
 
-export async function getUserFromAccessToken(accessToken: string): Promise<{ id: string; email?: string } | null> {
+export async function getUserFromAccessToken(
+  accessToken: string,
+): Promise<{ id: string; email?: string } | null> {
   const res = await fetch(`${env.supabaseUrl()}/auth/v1/user`, {
     headers: {
-      apikey: env.supabaseAnonKey(),
+      ...supabaseApiKeyHeaders(env.supabasePublishableKey()),
       Authorization: `Bearer ${accessToken}`,
     },
   });

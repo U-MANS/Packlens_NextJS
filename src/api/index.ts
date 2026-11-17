@@ -339,10 +339,24 @@ export async function createProject(payload: ProjectCreatePayload): Promise<ApiP
 export async function createDemoProject(payload?: {
   template?: unknown;
   unique_sku?: boolean;
+  archive?: File;
 }): Promise<{ project: ApiProject; sku: string; message: string }> {
+  if (payload?.archive) {
+    const form = new FormData();
+    form.append('archive', payload.archive);
+    form.append('unique_sku', String(payload?.unique_sku !== false));
+    return apiFetch('/projects/demo', {
+      method: 'POST',
+      body: form,
+    });
+  }
+
   return apiFetch('/projects/demo', {
     method: 'POST',
-    body: JSON.stringify(payload ?? {}),
+    body: JSON.stringify({
+      template: payload?.template,
+      unique_sku: payload?.unique_sku,
+    }),
   });
 }
 
