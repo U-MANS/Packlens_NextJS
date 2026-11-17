@@ -136,14 +136,14 @@ export const PACKAGING_HELIOS: TenantConfig = {
     { id: 'campaigns', label: 'Campañas', path: '/campaigns', enabled: true },
     { id: 'hours', label: 'Horas', path: '/hours', enabled: true },
     { id: 'users', label: 'Usuarios', path: '/users', enabled: true, adminOnly: true },
-    { id: 'agents', label: 'Agentes', path: '/agents', enabled: true, adminOnly: true },
     {
-      id: 'org-settings',
-      label: 'Config. tenant',
-      path: '/admin/org',
+      id: 'settings',
+      label: 'Configuración',
+      path: '/settings',
       enabled: true,
-      platformOnly: true,
+      adminExclusive: true,
     },
+    { id: 'agents', label: 'Agentes', path: '/agents', enabled: true, adminOnly: true },
   ],
   permissions: {
     approvePhases: {
@@ -171,7 +171,6 @@ export const PACKAGING_HELIOS: TenantConfig = {
     uploadArteFinalRoles: ['Diseño', 'Admin', 'Manager'],
     manageBriefingRoles: ['Marketing', 'Diseño', 'Admin', 'Manager'],
     manageUsersRoles: ['Admin', 'Manager'],
-    manageOrgSettingsRoles: ['Admin'],
   },
   features: {
     parallelValidationLegal: true,

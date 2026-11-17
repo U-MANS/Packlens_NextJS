@@ -11,7 +11,8 @@
 - **Distinto hosting** (un proyecto Vercel por cliente).
 - **Distinta base** (un proyecto Supabase por cliente).
 - Sin selector de tenant ni salto de Admin entre clientes.
-- Cada instancia tiene su org (`organizations` + `memberships`) y plantilla de producto (`template_key`).
+- Sin pantalla «Config. tenant»: el flujo sale de la plantilla de código (`template_key` en la org).
+- Cada instancia tiene su org (`organizations` + `memberships`) y plantilla de producto.
 
 ## Variables por proyecto Vercel
 

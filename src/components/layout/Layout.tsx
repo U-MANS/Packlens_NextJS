@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   FolderKanban,
@@ -23,7 +23,7 @@ import { ThemeToggle } from '../theme/ThemeToggle';
 import { Toaster } from '../ui/Toast';
 import { GlobalSearch } from './GlobalSearch';
 import { NotificationPanel } from './NotificationPanel';
-import { enabledNavItems } from '../../lib/tenant/config';
+import { canAccessNavPath, enabledNavItems } from '../../lib/tenant/config';
 import { PACKAGING_HELIOS } from '../../lib/tenant/templates/helios';
 import { isOpsAdminRole, type Role } from '../../types';
 
@@ -35,8 +35,8 @@ const NAV_ICONS: Record<string, typeof LayoutDashboard> = {
   campaigns: Megaphone,
   hours: Clock,
   users: Users,
+  settings: Settings2,
   agents: Bot,
-  'org-settings': Settings2,
 };
 
 const Layout = () => {
@@ -104,11 +104,18 @@ const Layout = () => {
   const canSimulateRoles = isOpsAdminRole(user?.role);
   const brandName = organization?.name || 'PackLens';
 
-  const renderNavLinks = (adminOnly: boolean) =>
+  const isAdminSection = (item: (typeof navItems)[number]) =>
+    Boolean(item.adminOnly || item.adminExclusive);
+
+  if (user && !canAccessNavPath(config, user.role, location.pathname)) {
+    return <Navigate to="/" replace />;
+  }
+
+  const renderNavLinks = (adminSection: boolean) =>
     navItems
-      .filter((item) => Boolean(item.adminOnly) === adminOnly)
+      .filter((item) => isAdminSection(item) === adminSection)
       .map((item) => {
-        const Icon = NAV_ICONS[item.id] || (adminOnly ? Settings2 : FolderKanban);
+        const Icon = NAV_ICONS[item.id] || FolderKanban;
         const to = item.path === '/dashboard' ? '/' : item.path;
         return (
           <NavLink
@@ -172,7 +179,7 @@ const Layout = () => {
         <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
           {renderNavLinks(false)}
 
-          {navItems.some((item) => item.adminOnly) && (
+          {navItems.some((item) => isAdminSection(item)) && (
             <div className="pt-3 mt-3 border-t border-border space-y-1">
               {renderNavLinks(true)}
             </div>

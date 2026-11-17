@@ -11,7 +11,7 @@ export function isOpsAdminRole(role: string | null | undefined): boolean {
   return role === 'Admin' || role === 'Manager';
 }
 
-/** Solo Admin de plataforma (config. tenant). */
+/** Rol Admin de la instancia. */
 export function isPlatformAdminRole(role: string | null | undefined): boolean {
   return role === 'Admin';
 }

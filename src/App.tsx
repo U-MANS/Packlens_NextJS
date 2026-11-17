@@ -20,7 +20,7 @@ import LibraryProduct from './views/LibraryProduct';
 import Moodboard from './views/Moodboard';
 import CampaignsCalendar from './views/CampaignsCalendar';
 import HoursControl from './views/HoursControl';
-import AdminOrgSettings from './views/AdminOrgSettings';
+import OrgSettings from './views/OrgSettings';
 
 function App() {
   return (
@@ -48,8 +48,8 @@ function App() {
             <Route path="campaigns/*" element={<Navigate to="/campaigns" replace />} />
             <Route path="hours" element={<HoursControl />} />
             <Route path="users" element={<Users />} />
+            <Route path="settings" element={<OrgSettings />} />
             <Route path="agents" element={<Agents />} />
-            <Route path="admin/org" element={<AdminOrgSettings />} />
           </Route>
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

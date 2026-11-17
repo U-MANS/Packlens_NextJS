@@ -34,15 +34,9 @@ export function canManageUsers(user: DbUser, config?: TenantConfig | null): bool
   return roles.includes(user.role);
 }
 
-/** Solo Admin de plataforma: Config. tenant / settings org. */
-export function canManageOrgSettings(user: DbUser, config?: TenantConfig | null): boolean {
-  const roles = config?.permissions.manageOrgSettingsRoles ?? ['Admin'];
-  return roles.includes(user.role);
-}
-
 /**
  * Manager no puede crear/asignar Admin ni modificar un Admin existente.
- * Admin de plataforma sí puede gestionar todos los roles.
+ * Admin sí puede gestionar todos los roles.
  */
 export function canAssignRole(
   actor: DbUser,

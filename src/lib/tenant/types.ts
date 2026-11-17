@@ -32,7 +32,18 @@ export type TenantNavId =
   | 'hours'
   | 'users'
   | 'agents'
-  | 'org-settings';
+  | 'settings';
+
+/** Pestañas que el Admin puede ocultar al resto de la org. */
+export const CONFIGURABLE_NAV_IDS: readonly TenantNavId[] = [
+  'library',
+  'moodboard',
+  'campaigns',
+  'hours',
+  'agents',
+] as const;
+
+export type NavVisibilityMap = Partial<Record<TenantNavId, boolean>>;
 
 export interface TenantPhaseDef {
   id: TenantPhaseId;
@@ -68,21 +79,19 @@ export interface TenantNavItem {
   path: string;
   /** Si true, Admin o Manager (ops). */
   adminOnly?: boolean;
-  /** Si true, solo Admin de plataforma (Config. tenant). */
-  platformOnly?: boolean;
+  /** Si true, solo Admin (p. ej. Configuración). */
+  adminExclusive?: boolean;
   enabled: boolean;
 }
 
 export interface TenantPermissions {
-  /** Rol ? fases que puede aprobar. */
+  /** Rol → fases que puede aprobar. */
   approvePhases: Record<string, TenantPhaseLabel[]>;
   uploadDesignRoles: string[];
   uploadDesarrolloRoles: string[];
   uploadArteFinalRoles: string[];
   manageBriefingRoles: string[];
   manageUsersRoles: string[];
-  /** Quién puede editar settings / plantilla del tenant. */
-  manageOrgSettingsRoles: string[];
 }
 
 export interface TenantConfig {
@@ -119,4 +128,6 @@ export type TenantSettingsOverride = Partial<{
   permissions: TenantPermissions;
   features: TenantConfig['features'];
   phaseDisplayNames: Partial<Record<TenantPhaseLabel, string>>;
+  /** Visibilidad de pestañas opcionales para miembros no-Admin. */
+  navVisibility: NavVisibilityMap;
 }>;

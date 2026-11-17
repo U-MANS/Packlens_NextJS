@@ -1,8 +1,11 @@
 import type {
+  NavVisibilityMap,
   TenantConfig,
+  TenantNavId,
   TenantPhaseLabel,
   TenantSettingsOverride,
 } from './types';
+import { CONFIGURABLE_NAV_IDS } from './types';
 import { DEFAULT_TEMPLATE_KEY, getTemplate } from './templates';
 
 /** ID fijo histórico de Helios (solo referencia / seeds antiguos). */
@@ -46,7 +49,44 @@ export function mergeTenantConfig(
     });
   }
 
+  if (s.navVisibility && typeof s.navVisibility === 'object') {
+    merged.nav = applyNavVisibility(merged.nav, s.navVisibility);
+  }
+
   return merged;
+}
+
+export function applyNavVisibility(
+  nav: TenantConfig['nav'],
+  visibility: NavVisibilityMap
+): TenantConfig['nav'] {
+  return nav.map((item) => {
+    if (!(CONFIGURABLE_NAV_IDS as readonly string[]).includes(item.id)) return item;
+    if (typeof visibility[item.id] !== 'boolean') return item;
+    return { ...item, enabled: visibility[item.id] as boolean };
+  });
+}
+
+export function resolveNavVisibility(
+  config: TenantConfig,
+  settings: TenantSettingsOverride | Record<string, unknown> | null | undefined
+): NavVisibilityMap {
+  const stored =
+    settings && typeof settings === 'object'
+      ? ((settings as TenantSettingsOverride).navVisibility ?? {})
+      : {};
+  const result: NavVisibilityMap = {};
+  for (const id of CONFIGURABLE_NAV_IDS) {
+    const item = config.nav.find((n) => n.id === id);
+    if (!item) continue;
+    result[id] =
+      typeof stored[id] === 'boolean' ? (stored[id] as boolean) : item.enabled;
+  }
+  return result;
+}
+
+export function isConfigurableNavId(id: string): id is TenantNavId {
+  return (CONFIGURABLE_NAV_IDS as readonly string[]).includes(id);
 }
 
 export function getDefaultPhaseOrder(config: TenantConfig): TenantPhaseLabel[] {
@@ -108,10 +148,28 @@ export function canRoleApprovePhase(
 }
 
 export function enabledNavItems(config: TenantConfig, role: string | null | undefined) {
+  const isAdmin = role === 'Admin';
   return config.nav.filter((item) => {
-    if (!item.enabled) return false;
-    if (item.platformOnly && role !== 'Admin') return false;
+    if (item.adminExclusive && role !== 'Admin') return false;
     if (item.adminOnly && role !== 'Admin' && role !== 'Manager') return false;
+    // Admin ve todas las pestañas de plantilla; el resto respeta enabled.
+    if (!isAdmin && !item.enabled) return false;
     return true;
   });
+}
+
+/** True si el rol puede abrir esta ruta según la config de nav. */
+export function canAccessNavPath(
+  config: TenantConfig,
+  role: string | null | undefined,
+  pathname: string
+): boolean {
+  const allowed = enabledNavItems(config, role);
+  const match = config.nav.find((item) => {
+    const path = item.path === '/dashboard' ? '/' : item.path;
+    if (path === '/') return pathname === '/';
+    return pathname === path || pathname.startsWith(`${path}/`);
+  });
+  if (!match) return true;
+  return allowed.some((item) => item.id === match.id);
 }

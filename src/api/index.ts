@@ -57,41 +57,20 @@ export async function getMe(): Promise<ApiUser> {
   return apiFetch<ApiUser>('/auth/me');
 }
 
-export async function getOrgSettings() {
+export async function getNavSettings() {
   return apiFetch<{
-    organization: {
-      id: string;
-      slug: string;
-      name: string;
-      template_key: string;
-      status: string;
-    };
-    config: import('../lib/tenant/types').TenantConfig;
-    template_key: string;
-    settings: Record<string, unknown>;
-    templates: Array<{ key: string; name: string }>;
-  }>('/org');
+    navVisibility: Partial<Record<string, boolean>>;
+    items: Array<{ id: string; label: string; path: string; enabled: boolean }>;
+  }>('/settings/nav');
 }
 
-export async function updateOrgSettings(payload: {
-  name?: string;
-  template_key?: string;
-  settings?: import('../lib/tenant/types').TenantSettingsOverride;
-  apply_template?: boolean;
-}) {
+export async function updateNavSettings(navVisibility: Record<string, boolean>) {
   return apiFetch<{
-    organization: {
-      id: string;
-      slug: string;
-      name: string;
-      template_key: string;
-      status: string;
-    };
+    navVisibility: Partial<Record<string, boolean>>;
     config: import('../lib/tenant/types').TenantConfig;
-    settings: Record<string, unknown>;
-  }>('/org', {
+  }>('/settings/nav', {
     method: 'PATCH',
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ navVisibility }),
   });
 }
 
